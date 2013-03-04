@@ -354,7 +354,7 @@ test_file_limit(FileLimit0) ->
              [FileLimit0]};
     
         _ -> 
-            case FileLimit =< 4096 of 
+            case FileLimit < 4096 of 
                 true ->
                     {warn, "Open file limit of ~p is low, at least "
                      ++ "4096 is recommended", [FileLimit]};
@@ -427,7 +427,7 @@ check_erlang_limits() ->
 
 check_sysctls(Checklist) ->
     Fn = fun({Param, Val, Direction}) ->
-                 Output = string:strip(os:cmd("sysctl -n"++Param), right, $\n),
+                 Output = string:strip(os:cmd("sysctl -n "++Param), right, $\n),
                  Actual = list_to_integer(Output -- "\n"),
                  Good = case Direction of
                             gte -> Actual =< Val;
