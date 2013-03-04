@@ -88,6 +88,9 @@ start(_Type, _StartArgs) ->
     %% the app is missing or packaging is broken.
     catch cluster_info:register_app(riak_kv_cinfo),
 
+    %% print out critical env limits for support/debugging purposes
+    catch doc_env(),
+
     %% Spin up supervisor
     case riak_kv_sup:start_link() of
         {ok, Pid} ->
@@ -155,8 +158,7 @@ start(_Type, _StartArgs) ->
             {ok, Pid};
         {error, Reason} ->
             {error, Reason}
-    end,
-    document_environment().
+    end.
 
 %% @doc Prepare to stop - called before the supervisor tree is shutdown
 prep_stop(_State) ->
@@ -279,138 +281,149 @@ wait_for_put_fsms() ->
                       ]).
 
 %% @private
-document_environment() ->
+doc_env() ->
     lager:info("Environment and OS variables:"),
-    lager:info("-----------------------------"),
-    check_ulimits(),
-    check_erlang_limits(),
-    case os:type() of
-        {unix, linux}  ->
-             check_sysctls(?LINUX_PARAMS);
-        {unix, freebsd} ->
-            ok;
-        {unix, sunos} ->
-            ok;
-        _ -> 
-            lager:error("Unknown OS type, no platform specific info")
-    end,
-    lager:info("End environment dump.").
+    Ulimits = check_ulimits(),
+    ErlLimits = check_erlang_limits(),
+    OSLimits = case os:type() of
+                   {unix, linux}  ->
+                       check_sysctls(?LINUX_PARAMS);
+                   {unix, freebsd} ->
+                       [];
+                   {unix, sunos} ->
+                       [];
+                   _ -> 
+                       [{warn, "Unknown OS type, no platform specific info", []}]
+               end,
+    lists:map(fun({F, Fmt, Args}) ->
+                      lager:debug("Term: ~p", [{F, Fmt, Args}]),
+                      %% fake out lager a bit here
+                      F1 = case F of
+                               info -> info_msg;
+                               warn -> warning_msg;
+                               error -> error_msg
+                           end,
+                      error_logger:F1(Fmt, Args)
+              end, Ulimits ++ ErlLimits ++ OSLimits).
 
 %% we don't really care about anything other than cores and open files
 check_ulimits() ->
     %% file ulimit
     FileLimit0 = string:strip(os:cmd("ulimit -n"), right, $\n),
-    case FileLimit0 of 
-        "unlimited" -> 
-            %% check the OS limit;
-            OSLimit = case os:type() of 
-                          {unix, linux} ->
-                              string:strip(os:cmd("sysctl -n fs.file-max"), 
-                                           right, $\n);
-                          _ -> unknown
-                      end,
-            case OSLimit of
-                unknown -> 
-                    lager:warn("Open file limit unlimited but actual limit "
-                               "could not be ascertained");
+    FLMsg = case FileLimit0 of 
+                "unlimited" -> 
+                    %% check the OS limit;
+                    OSLimit = case os:type() of 
+                                  {unix, linux} ->
+                                      string:strip(os:cmd("sysctl -n fs.file-max"), 
+                                                   right, $\n);
+                                  _ -> unknown
+                              end,
+                    case OSLimit of
+                        unknown -> 
+                            {warn, "Open file limit unlimited but actual limit "
+                             ++ "could not be ascertained", []};
+                        _ -> 
+                            test_file_limit(OSLimit)
+                    end;
                 _ -> 
-                    test_file_limit(OSLimit)
-            end;
-        _ -> 
-            test_file_limit(FileLimit0)
-    end, 
+                    test_file_limit(FileLimit0)
+            end, 
     CoreLimit0 = string:strip(os:cmd("ulimit -n"), right, $\n),
-    case CoreLimit0 of 
-        "unlimited" -> 
-            lager:info("No Core limit");
-        _  ->
-            CoreLimit = list_to_integer(CoreLimit0),
-            case CoreLimit == 0 of 
-                true ->
-                    lager:warn("Cores are disabled, this may "
-                               "hinder debugging");
-                false ->
-                    lager:info("Core limit: ~d", [CoreLimit])
-            end
-    end.
+    CLMsg = case CoreLimit0 of 
+                "unlimited" -> 
+                    {info, "No Core limit", []};
+                _  ->
+                    CoreLimit = list_to_integer(CoreLimit0),
+                    case CoreLimit == 0 of 
+                        true ->
+                            {warn, "Cores are disabled, this may " 
+                             ++ "hinder debugging", []};
+                        false ->
+                            {info, "Core limit: ~p", [CoreLimit]}
+                    end
+            end,
+    [FLMsg, CLMsg].
 
 %% @private
 test_file_limit(FileLimit0) ->
     FileLimit = (catch list_to_integer(FileLimit0)),
     case FileLimit of
         {'EXIT', {badarg,_}} -> 
-            lager:warn("Open file limit was read as non-integer string: ~s",
-                       [FileLimit0]);
+            {warn, "Open file limit was read as non-integer string: ~s",
+             [FileLimit0]};
     
         _ -> 
             case FileLimit =< 4096 of 
                 true ->
-                    lager:warn("Open file limit of ~d is low, at least "
-                               "4096 is recommended", [FileLimit]);
+                    {warn, "Open file limit of ~p is low, at least "
+                     ++ "4096 is recommended", [FileLimit]};
                 false -> 
-                    lager:info("Open file limit: ~d", [FileLimit])
+                    {info, "Open file limit: ~p", [FileLimit]}
             end
     end.      
 
 check_erlang_limits() ->
     %% processes
-    case erlang:system_info(process_limit) of
-        PL1 when PL1 < 4096 ->
-            lager:warn("Process limit of ~d is low, at least "
-                       "4096 is recommended", [PL1]);
-        PL2 ->
-            lager:info("Open file limit: ~d", [PL2])
-    end,
+    PLMsg = case erlang:system_info(process_limit) of
+                PL1 when PL1 < 4096 ->
+                    {warn, "Process limit of ~p is low, at least "
+                     "4096 is recommended", [PL1]};
+                PL2 ->
+                    {info,"Open file limit: ~p", [PL2]}
+            end,
     %% ports
     PortLimit = case os:getenv("ERL_MAX_PORTS") of
                     false -> 1024;
                     PL -> list_to_integer(PL)
                 end,
-    case PortLimit < 4096 of
-        true ->
-            %% needs to be revisited for R16+
-            lager:warn("Erlang ports limit of ~d is low, at least "
-                       "4096 is recommended", [PortLimit]);
-        false ->
-            lager:info("Erlang ports limit: ~d", [PortLimit])
-    end,
-        
+    PortMsg = case PortLimit < 4096 of
+                  true ->
+                      %% needs to be revisited for R16+
+                      {warn, "Erlang ports limit of ~p is low, at least "
+                       "4096 is recommended", [PortLimit]};
+                  false ->
+                      {info, "Erlang ports limit: ~p", [PortLimit]}
+              end,
+    
     %% ets tables
     ETSLimit = case os:getenv("ERL_MAX_ETS_TABLES") of
                    false -> 1400;
                    Limit -> list_to_integer(Limit)
                end,
-    case ETSLimit < 8192 of
-        true ->
-            lager:warn("ETS table count limit of ~d is low, at least "
-                       "8192 is recommended.", [ETSLimit]);
-        false ->
-            larger:info("ETS table count limit: ~d",
-                        [ETSLimit])
-    end,
+    ETSMsg = case ETSLimit < 8192 of
+                 true ->
+                     {warn,"ETS table count limit of ~p is low, at least "
+                      "8192 is recommended.", [ETSLimit]};
+                 false ->
+                     {info, "ETS table count limit: ~p",
+                      [ETSLimit]}
+             end,
+
     %% fullsweep_after
-    GCGens = erlang:system_info(fullsweep_after),
-    lager:info("Fullsweep after setting: ~d", [GCGens]),
+    {fullsweep_after, GCGens} = erlang:system_info(fullsweep_after),
+    GCMsg = {info, "Generations before full sweep: ~p", [GCGens]},
+
     %% async_threads
-    case erlang:system_info(thread_pool_size) of
-        TPS1 when TPS1 < 64 ->
-            lager:warn("Thread pool size of ~d is low, at least 64 suggested",
-                       [TPS1]);
-        TPS2 ->
-            lager:info("Thread pool size: ~d", [TPS2])
-    end,
+    TPSMsg = case erlang:system_info(thread_pool_size) of
+                 TPS1 when TPS1 < 64 ->
+                     {warn,"Thread pool size of ~p is low, at least 64 "
+                      "suggested", [TPS1]};
+                 TPS2 ->
+                     {info, "Thread pool size: ~p", [TPS2]}
+             end,
     %% schedulers
     Schedulers = erlang:system_info(schedulers),
     Cores = erlang:system_info(logical_processors_available),
-    case Schedulers /= Cores of
-        true ->
-            lager:warn("Running ~d schedulers for ~d cores, "
-                       "these should match",
-                      [Schedulers, Cores]);
-        false ->
-            lager:info("Schedulers: ~d for ~d cores", 
-                       [Schedulers, Cores])
-    end.
+    SMsg = case Schedulers /= Cores of
+               true ->
+                   {warn, "Running ~p schedulers for ~p cores, "
+                    "these should match", [Schedulers, Cores]};
+               false ->
+                   {info, "Schedulers: ~p for ~p cores", 
+                    [Schedulers, Cores]}
+    end,
+    [PLMsg, PortMsg, ETSMsg, TPSMsg, GCMsg, SMsg].
 
 check_sysctls(Checklist) ->
     Fn = fun({Param, Val, Direction}) ->
@@ -423,15 +436,15 @@ check_sysctls(Checklist) ->
                         end,
                  case Good of 
                      true ->
-                         lager:info("sysctl ~s is ~p ~s ~p)", 
-                                    [Param, Actual, 
-                                     direction_to_word(Direction), 
-                                     Val]);
+                         {info , "sysctl ~s is ~p ~s ~p)", 
+                          [Param, Actual, 
+                           direction_to_word(Direction), 
+                           Val]};
                      false -> 
-                         lager:error("sysctl ~s is ~p, should be ~s~p)", 
-                                     [Param, Actual, 
-                                      direction_to_word2(Direction), 
-                                      Val])
+                         {warn, "sysctl ~s is ~p, should be ~s~p)", 
+                          [Param, Actual, 
+                           direction_to_word2(Direction), 
+                           Val]}
                  end
          end,
     lists:map(Fn, Checklist).
@@ -449,7 +462,3 @@ direction_to_word2(Direction) ->
         lte -> "at least ";
         eq  -> ""
     end.
-
-                 
-               
-
