@@ -5,10 +5,6 @@
 -module(riak_kv_wm_pipeline).
 -author('Christopher Meiklejohn <christopher.meiklejohn@gmail.com').
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 -export([init/1,
          to_stream/2,
          process_post/2,
@@ -16,9 +12,10 @@
          resource_exists/2,
          content_types_provided/2]).
 
--record(context, {pipeline}).
-
+-include_lib("riak_pipe/include/riak_pipe.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
+
+-record(context, {pipeline}).
 
 %% @doc Initialize the resource.
 init(_Config) ->
@@ -80,6 +77,3 @@ stream(Boundary) ->
                     "\r\n\r\n", Content, "\r\n"],
             {Body, fun() -> stream(Boundary) end}
     end.
-
--ifdef(TEST).
--endif.
