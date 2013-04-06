@@ -36,6 +36,7 @@
 dispatch_table() ->
     MapredProps = mapred_props(),
     StatsProps = stats_props(),
+    PipelineProps = pipeline_props(),
 
     lists:append(
       raw_dispatch(),
@@ -43,6 +44,8 @@ dispatch_table() ->
         riak_kv_wm_mapred, MapredProps},
        {[proplists:get_value(prefix, StatsProps)],
         riak_kv_wm_stats, StatsProps},
+       {[proplists:get_value(prefix, PipelineProps), pipeline],
+        riak_kv_wm_pipeline, PipelineProps},
        {["ping"], riak_kv_wm_ping, []}]).
 
 raw_dispatch() ->
@@ -115,3 +118,6 @@ mapred_props() ->
 
 stats_props() ->
     [{prefix, app_helper:get_env(riak_kv, stats_urlpath, "stats")}].
+
+pipeline_props() ->
+    [{prefix, app_helper:get_env(riak_kv, pipelines_urlpath, "pipelines")}].
