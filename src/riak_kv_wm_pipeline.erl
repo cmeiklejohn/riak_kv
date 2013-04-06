@@ -28,13 +28,19 @@ allowed_methods(ReqData, Context) ->
 %% @doc Resource exists if the pipeline is registered.
 resource_exists(ReqData, Context) ->
     Name = wrq:path_info(pipeline, ReqData),
-    Pipeline = list_to_existing_atom(Name),
 
-    case riak_kv_pipeline:retrieve(Pipeline) of
-        undefined ->
-            {false, ReqData, Context};
-        _ ->
-            {true, ReqData, #context{pipeline=Pipeline}}
+    try
+        Pipeline = list_to_existing_atom(Name),
+
+        case riak_kv_pipeline:retrieve(Pipeline) of
+            undefined ->
+                {false, ReqData, Context};
+            _ ->
+                {true, ReqData, #context{pipeline=Pipeline}}
+        end
+    catch
+        error:badarg ->
+            {false, ReqData, Context}
     end.
 
 %% @doc Provide data in byte streams only.
