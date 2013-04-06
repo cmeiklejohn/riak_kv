@@ -37,12 +37,18 @@
 start_link(Name, FittingSpecs) ->
     gen_server:start_link({global, Name}, ?MODULE, [Name, FittingSpecs], []).
 
+%% @doc Ingest a message into a pipeline.
+-spec accept(atom(), term()) -> ok | {error, riak_pipe_vnode:qerror()}.
 accept(Name, Message) ->
     gen_server:call({global, Name}, {accept, Message}, infinity).
 
+%% @doc Retrieve the pid of a pipeline's coordinating gen_server.
+-spec retrieve(atom()) -> pid() | undefined.
 retrieve(Name) ->
     global:whereis_name(Name).
 
+%% @doc Register a pid to receive results from the pipeline.
+-spec listen(atom(), pid()) -> ok | {error, {no_such_group, atom()}}.
 listen(Name, Pid) ->
     %% Attempt to create a process group for watching pipeline.
     ok = pg2:create(Name),
