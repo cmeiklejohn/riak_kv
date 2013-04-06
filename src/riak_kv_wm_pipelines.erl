@@ -18,7 +18,7 @@
 -record(context, {pipeline}).
 
 %% @doc Initialize the resource.
-init([]) ->
+init(_Config) ->
     {ok, #context{pipeline=undefined}}.
 
 %% @doc Support retrieval and creation.

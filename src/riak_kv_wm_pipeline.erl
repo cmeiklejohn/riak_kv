@@ -21,7 +21,7 @@
 -include_lib("webmachine/include/webmachine.hrl").
 
 %% @doc Initialize the resource.
-init([]) ->
+init(_Config) ->
     {ok, #context{pipeline=undefined}}.
 
 %% @doc Support sending and receiving of events.
