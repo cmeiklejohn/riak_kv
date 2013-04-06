@@ -40,7 +40,7 @@ create_path(ReqData, Context) ->
                 undefined ->
                     {Root, ReqData, NewContext};
                 Pipeline ->
-                    Resource = Root ++ "/" ++ binary_to_list(Pipeline),
+                    Resource = Root ++ "/" ++ atom_to_list(Pipeline),
                     NewReqData = wrq:set_resp_header("Location", Resource, ReqData),
                     {Root, NewReqData, NewContext}
             end;
@@ -70,7 +70,7 @@ maybe_create_pipeline(ReqData, Context) ->
         undefined ->
             RawPipeline = mochijson2:decode(Body),
             {struct, AtomPipeline} = atomize(RawPipeline),
-            Name = proplists:get_value(name, AtomPipeline),
+            Name = atomized_get_value(name, AtomPipeline, undefined),
             Fittings = proplists:get_value(fittings, AtomPipeline),
             FittingSpecs = fittings_to_fitting_specs(Fittings),
 
