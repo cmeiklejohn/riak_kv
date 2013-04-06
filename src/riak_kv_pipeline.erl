@@ -9,7 +9,9 @@
 
 %% API
 -export([start_link/2,
-         receive_message/2]).
+         accept/2,
+         listen/2,
+         retrieve/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -35,8 +37,18 @@
 start_link(Name, FittingSpecs) ->
     gen_server:start_link({global, Name}, ?MODULE, [Name, FittingSpecs], []).
 
-receive_message(Name, Message) ->
-    gen_server:call({global, Name}, {receive_message, Message}, infinity).
+accept(Name, Message) ->
+    gen_server:call({global, Name}, {accept, Message}, infinity).
+
+retrieve(Name) ->
+    global:whereis_name(Name).
+
+listen(Name, Pid) ->
+    %% Attempt to create a process group for watching pipeline.
+    ok = pg2:create(Name),
+
+    %% Add myself to the process list.
+    pg2:join(Name, Pid).
 
 %%====================================================================
 %% gen_server callbacks
@@ -66,7 +78,7 @@ init([Name, FittingSpecs]) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
-handle_call({receive_message, Message}, _From, State) ->
+handle_call({accept, Message}, _From, State) ->
     Pipe = State#state.pipe,
     Reply = riak_pipe:queue_work(Pipe, Message),
     {reply, Reply, State};
@@ -93,6 +105,7 @@ handle_info(#pipe_result{} = PipeResult, State)->
     Name = State#state.name,
     Result = PipeResult#pipe_result.result,
 
+    %% Broadcast to all members of the named process group.
     _ = case pg2:get_members(Name) of
         {error, _} ->
             ok;
