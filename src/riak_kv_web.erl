@@ -30,7 +30,9 @@
 %%</dd></dl>
 -module(riak_kv_web).
 
--export([dispatch_table/0]).
+-export([dispatch_table/0,
+         pipeline_props/0]).
+
 -include("riak_kv_wm_raw.hrl").
 
 dispatch_table() ->
@@ -44,6 +46,8 @@ dispatch_table() ->
         riak_kv_wm_mapred, MapredProps},
        {[proplists:get_value(prefix, StatsProps)],
         riak_kv_wm_stats, StatsProps},
+       {[proplists:get_value(prefix, PipelineProps)],
+        riak_kv_wm_pipelines, PipelineProps},
        {[proplists:get_value(prefix, PipelineProps), pipeline],
         riak_kv_wm_pipeline, PipelineProps},
        {["ping"], riak_kv_wm_ping, []}]).
