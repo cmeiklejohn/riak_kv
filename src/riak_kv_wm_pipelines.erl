@@ -40,7 +40,7 @@ create_path(ReqData, Context) ->
                 undefined ->
                     {Root, ReqData, NewContext};
                 Pipeline ->
-                    Resource = Root ++ "/" ++ atom_to_list(Pipeline),
+                    Resource = Root ++ "/" ++ binary_to_list(Pipeline),
                     NewReqData = wrq:set_resp_header("Location", Resource, ReqData),
                     {Root, NewReqData, NewContext}
             end;
@@ -68,8 +68,8 @@ maybe_create_pipeline(ReqData, Context) ->
 
     case Context#context.pipeline of
         undefined ->
-            {struct, RawPipeline} = mochijson2:decode(Body),
-            AtomPipeline = atomize(RawPipeline),
+            RawPipeline = mochijson2:decode(Body),
+            {struct, AtomPipeline} = atomize(RawPipeline),
             Name = proplists:get_value(name, AtomPipeline),
             Fittings = proplists:get_value(fittings, AtomPipeline),
             FittingSpecs = fittings_to_fitting_specs(Fittings),
@@ -84,13 +84,14 @@ maybe_create_pipeline(ReqData, Context) ->
             {true, Context}
     end.
 
-%% @doc Atomize a JSON object.
-atomize(List) when is_list(List) ->
-    [atomize(Item) || Item <- List];
-atomize({Key, Value}) ->
-    {atomize(Key), atomize(Value)};
-atomize(Object) ->
-    binary_to_existing_atom(Object, utf8).
+%% @doc Given a struct/proplist that we've received via JSON,
+%% recursively turn the keys into atoms from binaries.
+atomize({struct, L}) ->
+    {struct, [{binary_to_existing_atom(I, utf8), atomize(J)} || {I, J} <- L]};
+atomize(L) when is_list(L) ->
+    [atomize(I) || I <- L];
+atomize(X) ->
+    X.
 
 %% @doc Start a pipeline.
 register_pipeline(Name, FittingSpecs) ->
@@ -99,10 +100,26 @@ register_pipeline(Name, FittingSpecs) ->
 %% @doc Convert fittings to fitting specs.
 fittings_to_fitting_specs(Fittings) ->
     lists:foldl(fun({struct, Fitting}, FittingSpecs) ->
-                Name = proplists:get_value(name, Fitting, foo),
-                Module = proplists:get_value(module, Fitting, riak_pipe_w_pass),
-                Arg = proplists:get_value(arg, Fitting, undefined),
+                Name = atomized_get_value(name, Fitting, foo),
+                Module = atomized_get_value(module, Fitting, riak_pipe_w_pass),
+                Arg = atomized_get_value(arg, Fitting, undefined),
                 Spec = #fitting_spec{name=Name, module=Module, arg=Arg},
                 FittingSpecs ++ [Spec]
         end, [], Fittings).
 
+%% @doc
+%%
+%% Return a value from a proplist, and ensure it's an atom.
+%%
+%% Possible atom-table injection attack here, but necessary until we
+%% adapt pipe to take things other than atoms.
+%%
+%% @end
+atomized_get_value(Key, List, Default) when is_atom(Default) ->
+    Result = proplists:get_value(Key, List, Default),
+    case is_binary(Result) of
+        true ->
+            binary_to_atom(Result, utf8);
+        false ->
+            Result
+    end.
