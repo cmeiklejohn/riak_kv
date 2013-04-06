@@ -87,6 +87,9 @@ init([]) ->
     EntropyManager = {riak_kv_entropy_manager,
                       {riak_kv_entropy_manager, start_link, []},
                       permanent, 30000, worker, [riak_kv_entropy_manager]},
+    PipelineSup = {riak_kv_pipeline_sup,
+                 {riak_kv_pipeline_sup, start_link, []},
+                 permanent, infinity, supervisor, [riak_kv_pipeline_sup]},
 
     % Figure out which processes we should run...
     HasStorageBackend = (app_helper:get_env(riak_kv, storage_backend) /= undefined),
@@ -105,7 +108,8 @@ init([]) ->
         JSSup,
         MapJSPool,
         ReduceJSPool,
-        HookJSPool
+        HookJSPool,
+        PipelineSup
     ]),
 
     % Run the proesses...
