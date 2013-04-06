@@ -33,7 +33,7 @@ resource_exists(ReqData, Context) ->
     Name = wrq:path_info(pipeline, ReqData),
     Pipeline = list_to_existing_atom(Name),
 
-    case riak_stream_pipeline:retrieve(Pipeline) of
+    case riak_kv_pipeline:retrieve(Pipeline) of
         undefined ->
             {false, ReqData, Context};
         _ ->
@@ -49,7 +49,7 @@ process_post(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
     Pipeline = Context#context.pipeline,
 
-    case riak_stream_pipeline_sup:receive_message(Pipeline, Body) of
+    case riak_kv_pipeline:accept(Pipeline, Body) of
         ok ->
             {true, ReqData, Context};
         {error, _} ->
