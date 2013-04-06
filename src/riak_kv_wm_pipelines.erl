@@ -68,7 +68,7 @@ maybe_create_pipeline(ReqData, Context) ->
 
     case Context#context.pipeline of
         undefined ->
-            RawPipeline = jsx:decode(Body),
+            {struct, RawPipeline} = mochijson2:decode(Body),
             AtomPipeline = atomize(RawPipeline),
             Name = proplists:get_value(name, AtomPipeline),
             Fittings = proplists:get_value(fittings, AtomPipeline),
