@@ -7,10 +7,12 @@
 
 -export([init/1,
          to_stream/2,
+         from_stream/2,
          process_post/2,
          allowed_methods/2,
          resource_exists/2,
-         content_types_provided/2]).
+         content_types_provided/2,
+         content_types_accepted/2]).
 
 -include_lib("riak_pipe/include/riak_pipe.hrl").
 -include_lib("webmachine/include/webmachine.hrl").
@@ -47,14 +49,39 @@ resource_exists(ReqData, Context) ->
 content_types_provided(ReqData, Context) ->
     {[{"application/octet-stream", to_stream}], ReqData, Context}.
 
+%% @doc Accept data in byte streams only.
+content_types_accepted(ReqData, Context) ->
+    {[{"application/octet-stream", from_stream}], ReqData, Context}.
+
 %% @doc Ingest messages.
-process_post(ReqData, Context) ->
+from_stream(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
     Pipeline = Context#context.pipeline,
 
     case riak_kv_pipeline:accept(Pipeline, Body) of
         ok ->
             {true, ReqData, Context};
+        {error, _} ->
+            {false, ReqData, Context}
+    end.
+
+%% @doc Ingest messages and return the result immediately.
+process_post(ReqData, Context) ->
+    Body = wrq:req_body(ReqData),
+    Pipeline = Context#context.pipeline,
+
+    case riak_kv_pipeline:listen(Pipeline, self()) of
+        ok ->
+            case riak_kv_pipeline:accept(Pipeline, Body) of
+                ok ->
+                    receive
+                        Response ->
+                            NewReqData = wrq:set_resp_body(Response, ReqData),
+                            {true, NewReqData, Context}
+                    end;
+                {error, _} ->
+                    {false, ReqData, Context}
+            end;
         {error, _} ->
             {false, ReqData, Context}
     end.
