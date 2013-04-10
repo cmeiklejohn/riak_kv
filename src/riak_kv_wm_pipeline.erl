@@ -25,7 +25,7 @@ init(_Config) ->
 
 %% @doc Support sending and receiving of events.
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'POST'], ReqData, Context}.
+    {['HEAD', 'GET', 'POST', 'PUT'], ReqData, Context}.
 
 %% @doc Resource exists if the pipeline is registered.
 resource_exists(ReqData, Context) ->
