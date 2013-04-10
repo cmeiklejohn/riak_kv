@@ -68,18 +68,23 @@ maybe_create_pipeline(ReqData, Context) ->
 
     case Context#context.pipeline of
         undefined ->
-            RawPipeline = mochijson2:decode(Body),
-            {struct, AtomPipeline} = atomize(RawPipeline),
-            Name = atomized_get_value(name, AtomPipeline, undefined),
-            Fittings = proplists:get_value(fittings, AtomPipeline),
-            FittingSpecs = fittings_to_fitting_specs(Fittings),
-
-            case register_pipeline(Name, FittingSpecs) of
-                {ok, _} ->
-                    {true, Context#context{pipeline=Name}};
+            case Body of
+                <<"">> ->
+                    {false, Context};
                 _ ->
-                    {false, Context}
-            end;
+                    RawPipeline = mochijson2:decode(Body),
+                    {struct, AtomPipeline} = atomize(RawPipeline),
+                    Name = atomized_get_value(name, AtomPipeline, undefined),
+                    Fittings = proplists:get_value(fittings, AtomPipeline),
+                    FittingSpecs = fittings_to_fitting_specs(Fittings),
+
+                    case register_pipeline(Name, FittingSpecs) of
+                        {ok, _} ->
+                            {true, Context#context{pipeline=Name}};
+                        _ ->
+                            {false, Context}
+                    end
+                end;
         _Pipeline ->
             {true, Context}
     end.
