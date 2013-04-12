@@ -53,6 +53,7 @@ content_types_accepted(ReqData, Context) ->
     {[{"application/json", from_json}], ReqData, Context}.
 
 %% @doc Return 400 if we can't create.
+%%
 %% @todo Return 409 if the pipeline already exists.
 from_json(ReqData, Context) ->
     case maybe_create_pipeline(ReqData, Context) of
@@ -108,14 +109,31 @@ register_pipeline(Name, FittingSpecs) ->
     riak_kv_pipeline_sup:start_pipeline(Name, FittingSpecs).
 
 %% @doc Convert fittings to fitting specs.
+%%
+%% @todo This method needs much better error checking; potentially
+%%       returning an ok | error tuple type response.  Also, explore
+%%       removing the atomize method and operating directly on the
+%%       binaries.
 fittings_to_fitting_specs(Fittings) ->
     lists:foldl(fun({struct, Fitting}, FittingSpecs) ->
                 Name = atomized_get_value(name, Fitting, foo),
                 Module = atomized_get_value(module, Fitting, riak_pipe_w_pass),
-                Arg = atomized_get_value(arg, Fitting, undefined),
-                Spec = #fitting_spec{name=Name, module=Module, arg=Arg},
-                FittingSpecs ++ [Spec]
+                Arg = case atomized_get_value(arg, Fitting, undefined) of
+                    {struct, Args} ->
+                        ArgModule = atomized_get_value(module, Args, undefined),
+                        ArgFunction = atomized_get_value(function, Args, undefined),
+                        ArgArity = atomized_get_value(arity, Args, 0),
+                        erlang:make_fun(ArgModule, ArgFunction, ArgArity);
+                    Value ->
+                       Value
+                end,
+                FittingSpecs ++ [generate_fitting_spec(Name, Module, Arg)]
         end, [], Fittings).
+
+%% @doc Generate a riak pipe fitting specification.
+-spec generate_fitting_spec(atom(), atom(), term()) -> #fitting_spec{}.
+generate_fitting_spec(Name, Module, Arg) ->
+    #fitting_spec{name=Name, module=Module, arg=Arg}.
 
 %% @doc
 %%
@@ -125,7 +143,7 @@ fittings_to_fitting_specs(Fittings) ->
 %% adapt pipe to take things other than atoms.
 %%
 %% @end
-atomized_get_value(Key, List, Default) when is_atom(Default) ->
+atomized_get_value(Key, List, Default) ->
     Result = proplists:get_value(Key, List, Default),
     case is_binary(Result) of
         true ->
