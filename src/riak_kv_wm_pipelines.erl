@@ -66,12 +66,16 @@ from_json(ReqData, Context) ->
 maybe_create_pipeline(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
 
+    lager:info("Attempting pipeline registration..."),
+
     case Context#context.pipeline of
         undefined ->
             case Body of
                 <<"">> ->
+                    lager:info("Pipeline registration failed, no body."),
                     {false, Context};
                 _ ->
+                    lager:info("Pipeline registering..."),
                     RawPipeline = mochijson2:decode(Body),
                     {struct, AtomPipeline} = atomize(RawPipeline),
                     Name = atomized_get_value(name, AtomPipeline, undefined),
@@ -81,7 +85,8 @@ maybe_create_pipeline(ReqData, Context) ->
                     case register_pipeline(Name, FittingSpecs) of
                         {ok, _} ->
                             {true, Context#context{pipeline=Name}};
-                        _ ->
+                        {error, Error} ->
+                            lager:info("Pipeline registration failed: ~p", [Error]),
                             {false, Context}
                     end
                 end;
