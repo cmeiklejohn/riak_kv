@@ -70,8 +70,6 @@ from_json(ReqData, Context) ->
 maybe_create_pipeline(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
 
-    lager:info("Attempting pipeline registration..."),
-
     case Context#context.pipeline of
         undefined ->
             case Body of
@@ -120,7 +118,7 @@ fittings_to_fitting_specs(Fittings) ->
                 RawModule = proplists:get_value(<<"module">>,
                                                 Fitting,
                                                 <<"riak_pipe_w_pass">>),
-                Module = binary_to_existing_atom(RawModule, utf8),
+                Module = binary_to_atom(RawModule, utf8),
 
                 RawArg = proplists:get_value(<<"arg">>, Fitting, <<"">>),
 
@@ -147,7 +145,7 @@ args_to_mfa(Args) ->
 -spec make_fun(term(), term(), term()) -> function().
 make_fun(Module, Function, Arity) ->
     erlang:make_fun(
-        binary_to_existing_atom(Module, utf8),
+        binary_to_atom(Module, utf8),
         binary_to_atom(Function, utf8),
         Arity).
 
