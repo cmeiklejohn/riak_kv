@@ -146,8 +146,8 @@ checkpoint(_Archive) ->
     lager:info("Checkpointing triggered."),
     ok.
 
-%% @doc Reducer which only cons the value.
--spec reduce_idemp(term(), term(), term(), term()) -> list().
+%% @doc Reducer which just returns the starting accumulator.
+-spec reduce_idemp(term(), term(), term(), term()) -> {ok, list()}.
 reduce_idemp(_, InAcc, _, _) ->
     lager:info("Reduce idemp triggered: ~p", [InAcc]),
     {ok, InAcc}.
