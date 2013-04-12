@@ -41,20 +41,23 @@ create_path(ReqData, Context) ->
                     {Root, ReqData, NewContext};
                 Pipeline ->
                     Resource = Root ++ "/" ++ atom_to_list(Pipeline),
-                    NewReqData = wrq:set_resp_header("Location", Resource, ReqData),
+                    NewReqData = add_location_header(Resource, ReqData),
                     {Root, NewReqData, NewContext}
             end;
         {false, Context} ->
             {Root, ReqData, Context}
     end.
 
+%% @doc Generate a response object with a location header.
+-spec add_location_header(list(), wrq:req_data()) -> wrq:req_data().
+add_location_header(Resource, ReqData) ->
+    wrq:set_resp_header("Location", Resource, ReqData).
+
 %% @doc Accept data in JSON only.
 content_types_accepted(ReqData, Context) ->
     {[{"application/json", from_json}], ReqData, Context}.
 
 %% @doc Return 400 if we can't create.
-%%
-%% @todo Return 409 if the pipeline already exists.
 from_json(ReqData, Context) ->
     case maybe_create_pipeline(ReqData, Context) of
         {true, NewContext} ->
@@ -73,21 +76,28 @@ maybe_create_pipeline(ReqData, Context) ->
         undefined ->
             case Body of
                 <<"">> ->
-                    lager:info("Pipeline registration failed, no body."),
                     {false, Context};
                 _ ->
-                    lager:info("Pipeline registering..."),
-                    RawPipeline = mochijson2:decode(Body),
-                    {struct, AtomPipeline} = atomize(RawPipeline),
-                    Name = atomized_get_value(name, AtomPipeline, undefined),
-                    Fittings = proplists:get_value(fittings, AtomPipeline),
-                    FittingSpecs = fittings_to_fitting_specs(Fittings),
+                    {struct, DecodedBody} = mochijson2:decode(Body),
 
-                    case register_pipeline(Name, FittingSpecs) of
-                        {ok, _} ->
-                            {true, Context#context{pipeline=Name}};
-                        {error, Error} ->
-                            lager:info("Pipeline registration failed: ~p", [Error]),
+                    RawName = proplists:get_value(<<"name">>,
+                                                  DecodedBody,
+                                                  <<"undefined">>),
+                    Name = binary_to_atom(RawName, utf8),
+
+                    Fittings = proplists:get_value(<<"fittings">>,
+                                                   DecodedBody,
+                                                   []),
+
+                    case fittings_to_fitting_specs(Fittings) of
+                        {ok, FittingSpecs} ->
+                            case register_pipeline(Name, FittingSpecs) of
+                                {ok, _} ->
+                                    {true, Context#context{pipeline=Name}};
+                                {error, _Error} ->
+                                    {false, Context}
+                            end;
+                        _ ->
                             {false, Context}
                     end
                 end;
@@ -95,59 +105,53 @@ maybe_create_pipeline(ReqData, Context) ->
             {true, Context}
     end.
 
-%% @doc Given a struct/proplist that we've received via JSON,
-%% recursively turn the keys into atoms from binaries.
-atomize({struct, L}) ->
-    {struct, [{binary_to_existing_atom(I, utf8), atomize(J)} || {I, J} <- L]};
-atomize(L) when is_list(L) ->
-    [atomize(I) || I <- L];
-atomize(X) ->
-    X.
-
 %% @doc Start a pipeline.
 register_pipeline(Name, FittingSpecs) ->
     riak_kv_pipeline_sup:start_pipeline(Name, FittingSpecs).
 
 %% @doc Convert fittings to fitting specs.
-%%
-%% @todo This method needs much better error checking; potentially
-%%       returning an ok | error tuple type response.  Also, explore
-%%       removing the atomize method and operating directly on the
-%%       binaries.
 fittings_to_fitting_specs(Fittings) ->
-    lists:foldl(fun({struct, Fitting}, FittingSpecs) ->
-                Name = atomized_get_value(name, Fitting, foo),
-                Module = atomized_get_value(module, Fitting, riak_pipe_w_pass),
-                Arg = case atomized_get_value(arg, Fitting, undefined) of
+    FittingSpecs = lists:foldl(fun({struct, Fitting}, FittingSpecs) ->
+                RawName = proplists:get_value(<<"name">>,
+                                              Fitting,
+                                              <<"undefined">>),
+                Name = binary_to_atom(RawName, utf8),
+
+                RawModule = proplists:get_value(<<"module">>,
+                                                Fitting,
+                                                <<"riak_pipe_w_pass">>),
+                Module = binary_to_existing_atom(RawModule, utf8),
+
+                RawArg = proplists:get_value(<<"arg">>, Fitting, <<"">>),
+
+                Arg = case RawArg of
                     {struct, Args} ->
-                        ArgModule = atomized_get_value(module, Args, undefined),
-                        ArgFunction = atomized_get_value(function, Args, undefined),
-                        ArgArity = atomized_get_value(arity, Args, 0),
-                        erlang:make_fun(ArgModule, ArgFunction, ArgArity);
+                        {Module1, Function1, Arity1} = args_to_mfa(Args),
+                        make_fun(Module1, Function1, Arity1);
                     Value ->
                        Value
                 end,
                 FittingSpecs ++ [generate_fitting_spec(Name, Module, Arg)]
-        end, [], Fittings).
+        end, [], Fittings),
+    {ok, FittingSpecs}.
+
+%% @doc Given a proplist, generate an MFA.
+-spec args_to_mfa(list()) -> {term(), term(), term()}.
+args_to_mfa(Args) ->
+    Module = proplists:get_value(<<"module">>, Args),
+    Function = proplists:get_value(<<"function">>, Args),
+    Arity = proplists:get_value(<<"arity">>, Args),
+    {Module, Function, Arity}.
+
+%% @doc Generate a function from a MFA.
+-spec make_fun(term(), term(), term()) -> function().
+make_fun(Module, Function, Arity) ->
+    erlang:make_fun(
+        binary_to_existing_atom(Module, utf8),
+        binary_to_atom(Function, utf8),
+        Arity).
 
 %% @doc Generate a riak pipe fitting specification.
 -spec generate_fitting_spec(atom(), atom(), term()) -> #fitting_spec{}.
 generate_fitting_spec(Name, Module, Arg) ->
     #fitting_spec{name=Name, module=Module, arg=Arg}.
-
-%% @doc
-%%
-%% Return a value from a proplist, and ensure it's an atom.
-%%
-%% Possible atom-table injection attack here, but necessary until we
-%% adapt pipe to take things other than atoms.
-%%
-%% @end
-atomized_get_value(Key, List, Default) ->
-    Result = proplists:get_value(Key, List, Default),
-    case is_binary(Result) of
-        true ->
-            binary_to_atom(Result, utf8);
-        false ->
-            Result
-    end.
