@@ -88,8 +88,6 @@
          validate_arg/1]).
 -export([chashfun/1]).
 
--export([reduce_idemp/4]).
-
 -include_lib("riak_pipe/include/riak_pipe.hrl").
 -include_lib("riak_pipe/include/riak_pipe_log.hrl").
 
@@ -145,12 +143,6 @@ archive(#state{accs=Accs}) ->
 checkpoint(_Archive) ->
     lager:info("Checkpointing triggered."),
     ok.
-
-%% @doc Reducer which just returns the starting accumulator.
--spec reduce_idemp(term(), term(), term(), term()) -> {ok, list()}.
-reduce_idemp(_, InAcc, _, _) ->
-    lager:info("Reduce idemp triggered: ~p", [InAcc]),
-    {ok, InAcc}.
 
 %% @doc The handoff merge is simple a dict:merge, where entries for
 %%      the same key are concatenated.  The reduce function is also
