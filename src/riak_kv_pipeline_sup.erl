@@ -20,11 +20,12 @@
 %% ===================================================================
 
 %% @doc API for starting the supervisor.
+-spec start_link() -> supervisor:startlink_ret().
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc Start a pipeline.
--spec start_pipeline(pid(), riak_pipe_fitting:details()) -> {ok, pid()}.
+-spec start_pipeline(atom(), [riak_pipe_fitting:details()]) -> {ok, pid()}.
 start_pipeline(Name, FittingSpecs) ->
     supervisor:start_child(?MODULE, [Name, FittingSpecs]).
 
