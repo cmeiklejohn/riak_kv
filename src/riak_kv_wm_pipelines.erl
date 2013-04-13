@@ -87,17 +87,13 @@ maybe_create_pipeline(ReqData, Context) ->
                                                    DecodedBody,
                                                    []),
 
-                    case fittings_to_fitting_specs(Fittings) of
-                        {ok, FittingSpecs} ->
-                            case register_pipeline(Name, FittingSpecs) of
-                                {ok, _} ->
-                                    {true, Context#context{pipeline=Name}};
-                                {error, _Error} ->
-                                    {false, Context}
-                            end;
-                        _ ->
-                            {false, Context}
-                    end
+                    %% TODO: better error handling
+                    {ok, Specs} = fittings_to_fitting_specs(Fittings),
+
+                    %% TODO: better error handling
+                    {ok, _Pid} = register_pipeline(Name, Specs),
+
+                    {true, Context#context{pipeline=Name}}
                 end;
         _Pipeline ->
             {true, Context}
