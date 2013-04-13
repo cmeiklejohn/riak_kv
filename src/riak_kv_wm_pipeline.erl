@@ -62,7 +62,7 @@ from_stream(ReqData, Context) ->
         ok ->
             {true, ReqData, Context};
         {error, _} ->
-            {false, ReqData, Context}
+            {{halt, 400}, ReqData, Context}
     end.
 
 %% @doc Ingest messages and return the result immediately.
