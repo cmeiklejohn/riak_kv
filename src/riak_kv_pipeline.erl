@@ -38,9 +38,15 @@ start_link(Name, FittingSpecs) ->
     gen_server:start_link({global, Name}, ?MODULE, [Name, FittingSpecs], []).
 
 %% @doc Ingest a message into a pipeline.
--spec accept(atom(), term()) -> ok | {error, riak_pipe_vnode:qerror()}.
+-spec accept(atom(), term()) ->
+    ok | {error, riak_pipe_vnode:qerror()} | {error, unregistered}.
 accept(Name, Message) ->
-    gen_server:call({global, Name}, {accept, Message}, infinity).
+    case retrieve(Name) of
+        undefined ->
+            {error, unregistered};
+        _Pid ->
+            gen_server:call({global, Name}, {accept, Message}, infinity)
+    end.
 
 %% @doc Retrieve the pid of a pipeline's coordinating gen_server.
 -spec retrieve(atom()) -> pid() | undefined.
