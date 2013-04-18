@@ -140,8 +140,8 @@ archive(#state{accs=Accs}) ->
 
 %% @doc Checkpoint archived state to riak_kv.
 -spec checkpoint(term()) -> ok.
-checkpoint(_Archive) ->
-    lager:info("Checkpointing triggered."),
+checkpoint(Archive) ->
+    lager:info("Checkpointing triggered: ~p\n", [Archive]),
     ok.
 
 %% @doc The handoff merge is simple a dict:merge, where entries for
