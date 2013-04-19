@@ -142,8 +142,18 @@ archive(#state{accs=Accs}) ->
 %%      accumulated state to the sink.
 -spec checkpoint(term(), state()) -> ok.
 checkpoint(Archive, #state{accs=Accs, p=Partition, fd=FittingDetails}) ->
-    lager:info("Checkpointing triggered: ~p\n", [Archive]),
+    lager:info("Checkpointing triggered.\n"),
 
+    %% Checkpoint data to KV.
+    Key = list_to_binary(integer_to_list(erlang:phash2(erlang:now()))),
+    Bucket = list_to_binary(integer_to_list(erlang:phash2(erlang:now()))),
+    Value = term_to_binary(Archive),
+    Object = riak_object:new(Bucket, Key, Value),
+    Response = riak_kv_vnode:local_put(Partition, Object),
+
+    lager:info("Checkpointing local_put response: ~p\n", [Response]),
+
+    %% Forward results to the next worker.
     [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
       || A <- dict:to_list(Accs)],
     ok.
