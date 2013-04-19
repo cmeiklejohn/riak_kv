@@ -66,25 +66,16 @@ from_stream(ReqData, Context) ->
             {{halt, 400}, ReqData, Context}
     end.
 
-%% @doc Ingest messages and return the result immediately.
+%% @doc Ingest messages.
 process_post(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
     Pipeline = Context#context.pipeline,
 
-    case riak_kv_pipeline:listen(Pipeline, self()) of
+    case riak_kv_pipeline:accept(Pipeline, Body) of
         ok ->
-            case riak_kv_pipeline:accept(Pipeline, Body) of
-                ok ->
-                    receive
-                        Response ->
-                            NewReqData = wrq:set_resp_body(Response, ReqData),
-                            {true, NewReqData, Context}
-                    end;
-                {error, _} ->
-                    {false, ReqData, Context}
-            end;
+            {true, ReqData, Context};
         {error, _} ->
-            {false, ReqData, Context}
+            {{halt, 400}, ReqData, Context}
     end.
 
 %% @doc Stream messages from the pipeline.
