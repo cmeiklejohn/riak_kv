@@ -80,7 +80,7 @@ unlisten(Name, Pid) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([Name, FittingSpecs]) ->
-    case riak_pipe:exec(FittingSpecs, [{log, lager}, {trace, all}]) of
+    case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
         {ok, Pipe} ->
             {ok, #state{name=Name, pipe=Pipe}};
         _ ->
