@@ -84,7 +84,7 @@
          done/1,
          archive/1,
          handoff/2,
-         checkpoint/1,
+         checkpoint/2,
          validate_arg/1]).
 -export([chashfun/1]).
 
@@ -138,10 +138,14 @@ archive(#state{accs=Accs}) ->
     %% just send state of reduce so far
     {ok, Accs}.
 
-%% @doc Checkpoint archived state to riak_kv.
--spec checkpoint(term()) -> ok.
-checkpoint(Archive) ->
+%% @doc Checkpoint archived state to riak_kv.  In addition, forward the
+%%      accumulated state to the sink.
+-spec checkpoint(term(), state()) -> ok.
+checkpoint(Archive, #state{accs=Accs, p=Partition, fd=FittingDetails}) ->
     lager:info("Checkpointing triggered: ~p\n", [Archive]),
+
+    [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
+      || A <- dict:to_list(Accs)],
     ok.
 
 %% @doc The handoff merge is simple a dict:merge, where entries for
