@@ -11,6 +11,7 @@
 -export([start_link/2,
          accept/2,
          listen/2,
+         unlisten/2,
          retrieve/1]).
 
 %% gen_server callbacks
@@ -61,6 +62,11 @@ listen(Name, Pid) ->
 
     %% Add myself to the process list.
     pg2:join(Name, Pid).
+
+%% @doc Unregister a listener.
+-spec unlisten(atom(), pid()) -> ok | {error, {no_such_group, atom()}}.
+unlisten(Name, Pid) ->
+    pg2:leave(Name, Pid).
 
 %%====================================================================
 %% gen_server callbacks
