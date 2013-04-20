@@ -146,7 +146,7 @@ archive(#state{accs=Accs}) ->
 -spec checkpoint(term(), state()) -> ok.
 checkpoint(Archive,
            #state{accs=Accs, p=Partition, fd=FittingDetails} = State) ->
-    lager:info("Checkpointing triggered.\n"),
+    lager:info("Checkpointing triggered for partition ~p.\n", [Partition]),
 
     %% Checkpoint data to KV.
     Key = checkpoint_key(State),
