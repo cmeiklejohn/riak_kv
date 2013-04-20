@@ -86,6 +86,7 @@
          handoff/2,
          checkpoint/2,
          validate_arg/1]).
+
 -export([chashfun/1]).
 
 -include_lib("riak_pipe/include/riak_pipe.hrl").
@@ -138,18 +139,27 @@ archive(#state{accs=Accs}) ->
     %% just send state of reduce so far
     {ok, Accs}.
 
+
 %% @doc Checkpoint archived state to riak_kv.  In addition, forward the
 %%      accumulated state to the sink.
+%% @todo Possibly memoize the client connection.
 -spec checkpoint(term(), state()) -> ok.
-checkpoint(Archive, #state{accs=Accs, p=Partition, fd=FittingDetails}) ->
+checkpoint(Archive,
+           #state{accs=Accs, p=Partition, fd=FittingDetails} = State) ->
     lager:info("Checkpointing triggered.\n"),
 
     %% Checkpoint data to KV.
-    Key = list_to_binary(integer_to_list(erlang:phash2(erlang:now()))),
-    Bucket = list_to_binary(integer_to_list(erlang:phash2(erlang:now()))),
-    Value = term_to_binary(Archive),
-    Object = riak_object:new(Bucket, Key, Value),
-    Response = riak_kv_vnode:local_put(Partition, Object),
+    Key = checkpoint_key(State),
+    Bucket = checkpoint_bucket(),
+    Value = serialize_archive(Archive),
+    Object = riak_object:new(Key, Bucket, Value),
+
+    Response = case riak:local_client() of
+        {ok, Client} ->
+            Client:put(Object);
+        Error ->
+            Error
+    end,
 
     lager:info("Checkpointing local_put response: ~p\n", [Response]),
 
@@ -212,3 +222,27 @@ validate_arg(Fun) ->
 -spec chashfun({term(), term()}) -> riak_pipe_vnode:chash().
 chashfun({Key,_}) ->
     chash:key_of(Key).
+
+%% @doc Serialize the archive for storage.
+-spec serialize_archive(dict()) -> binary().
+serialize_archive(Archive) ->
+    term_to_binary(Archive).
+
+%% @doc Generate a key for the checkpoint.
+%% @todo This may not be unique enough if they are running multiple of
+%%       the riak_kv checkpointing reducers.
+-spec checkpoint_key(state()) -> binary().
+checkpoint_key(#state{p=Partition, fd=FittingDetails}) ->
+    {_, {Module, _, _}} = process_info(self(), current_function),
+    Name = FittingDetails#fitting_details.name,
+    ListMod = atom_to_list(Module),
+    ListName = atom_to_list(Name),
+    list_to_binary(integer_to_list(Partition) ++
+                   "_" ++ ListMod ++ "_" ++ ListName).
+
+%% @doc Return the bucket used for checkpointing.
+-spec checkpoint_bucket() -> binary().
+checkpoint_bucket() ->
+    app_helper:get_env(riak_kv,
+                       vnode_checkpoint_bucket,
+                       <<"checkpoints">>).
