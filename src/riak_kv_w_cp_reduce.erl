@@ -146,22 +146,19 @@ archive(#state{accs=Accs}) ->
 -spec checkpoint(term(), state()) -> ok.
 checkpoint(Archive,
            #state{accs=Accs, p=Partition, fd=FittingDetails} = State) ->
-    lager:info("Checkpointing triggered for partition ~p.\n", [Partition]),
-
     %% Checkpoint data to KV.
     Key = checkpoint_key(State),
     Bucket = checkpoint_bucket(),
     Value = serialize_archive(Archive),
     Object = riak_object:new(Key, Bucket, Value),
 
-    Response = case riak:local_client() of
+    case riak:local_client() of
         {ok, Client} ->
             Client:put(Object);
         Error ->
+            lager:warning("Checkpointing failed. ~p\n", [Error]),
             Error
     end,
-
-    lager:info("Checkpointing local_put response: ~p\n", [Response]),
 
     %% Forward results to the next worker.
     [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
