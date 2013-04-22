@@ -129,7 +129,7 @@ process({Key, Input}, _Last, #state{accs=Accs}=State) ->
 %%      is where all outputs are sent.
 -spec done(state()) -> ok.
 done(#state{accs=Accs, p=Partition, fd=FittingDetails}) ->
-    [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
+    _ = [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
       || A <- dict:to_list(Accs)],
     ok.
 
@@ -161,7 +161,7 @@ checkpoint(Archive,
     end,
 
     %% Forward results to the next worker.
-    [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
+    _ = [ riak_pipe_vnode_worker:send_output(A, Partition, FittingDetails)
       || A <- dict:to_list(Accs)],
     ok.
 
