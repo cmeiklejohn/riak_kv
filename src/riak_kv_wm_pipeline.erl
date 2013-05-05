@@ -10,6 +10,7 @@
          from_stream/2,
          process_post/2,
          finish_request/2,
+         delete_resource/2,
          allowed_methods/2,
          resource_exists/2,
          content_types_provided/2,
@@ -26,7 +27,7 @@ init(_Config) ->
 
 %% @doc Support sending and receiving of events.
 allowed_methods(ReqData, Context) ->
-    {['HEAD', 'GET', 'POST', 'PUT'], ReqData, Context}.
+    {['HEAD', 'GET', 'POST', 'PUT', 'DELETE'], ReqData, Context}.
 
 %% @doc Resource exists if the pipeline is registered.
 resource_exists(ReqData, Context) ->
@@ -45,6 +46,17 @@ resource_exists(ReqData, Context) ->
         error:badarg ->
             {false, ReqData, Context}
     end.
+
+%% @doc Delete a pipeline.
+delete_resource(ReqData, Context) ->
+    Pipeline = Context#context.pipeline,
+    Response = case riak_kv_pipeline:terminate(Pipeline) of
+        ok ->
+            true;
+        {error, _Error} ->
+            false
+    end,
+    {Response, ReqData, Context}.
 
 %% @doc Provide data in byte streams only.
 content_types_provided(ReqData, Context) ->
