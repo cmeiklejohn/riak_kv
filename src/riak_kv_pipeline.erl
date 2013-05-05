@@ -12,6 +12,7 @@
          accept/2,
          listen/2,
          unlisten/2,
+         terminate/1,
          retrieve/1]).
 
 %% gen_server callbacks
@@ -37,6 +38,16 @@
 %%--------------------------------------------------------------------
 start_link(Name, FittingSpecs) ->
     gen_server:start_link({global, Name}, ?MODULE, [Name, FittingSpecs], []).
+
+%% @doc Terminate a pipeline.
+-spec terminate(atom()) -> ok | {error, unregistered}.
+terminate(Name) ->
+    case retrieve(Name) of
+        undefined ->
+            {error, unregistered};
+        _Pid ->
+            gen_server:call({global, Name}, terminate, infinity)
+    end.
 
 %% @doc Ingest a message into a pipeline.
 -spec accept(atom(), term()) ->
@@ -100,6 +111,9 @@ handle_call({accept, Message}, _From, State) ->
     Pipe = State#state.pipe,
     Reply = riak_pipe:queue_work(Pipe, Message),
     {reply, Reply, State};
+handle_call(terminate, _From, State) ->
+    Reply = ok,
+    {stop, terminate, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -142,7 +156,9 @@ handle_info(_Info, State) ->
 %% cleaning up. When it returns, the gen_server terminates with Reason.
 %% The return value is ignored.
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    Pipe = State#state.pipe,
+    riak_pipe:eoi(Pipe),
     ok.
 
 %%--------------------------------------------------------------------
