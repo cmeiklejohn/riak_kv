@@ -157,9 +157,13 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
-    Pipe = State#state.pipe,
-    riak_pipe:eoi(Pipe),
-    ok.
+    try
+        Pipe = State#state.pipe,
+        ok = riak_pipe:eoi(Pipe)
+    catch
+        _:_ ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% Func: code_change(OldVsn, State, Extra) -> {ok, NewState}
