@@ -23,7 +23,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, {name, pipe}).
+-record(state, {name, pipe, fitting_specs}).
 
 -include_lib("riak_pipe/include/riak_pipe.hrl").
 
@@ -93,7 +93,7 @@ unlisten(Name, Pid) ->
 init([Name, FittingSpecs]) ->
     case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
         {ok, Pipe} ->
-            {ok, #state{name=Name, pipe=Pipe}};
+            {ok, #state{name=Name, pipe=Pipe, fitting_specs=FittingSpecs}};
         _ ->
             {stop, failed_registration}
     end.
