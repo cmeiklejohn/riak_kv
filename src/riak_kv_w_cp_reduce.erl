@@ -103,7 +103,29 @@
            riak_pipe_fitting:details()) ->
          {ok, state()}.
 init(Partition, FittingDetails) ->
-    {ok, #state{accs=dict:new(), p=Partition, fd=FittingDetails}}.
+
+    %% Load checkpoint data from KV.
+    Key = checkpoint_key(#state{p=Partition, fd=FittingDetails}),
+    Bucket = checkpoint_bucket(),
+
+    Accs = case riak:local_client() of
+        {ok, Client} ->
+            case Client:get(Bucket, Key) of
+                {ok, Object} ->
+                    lager:warning("Checkpoint retrieval successful.\n"),
+                    deserialize_archive(Object);
+                GetError ->
+                    lager:warning("Checkpoint retrieval failed. ~p\n",
+                                  [GetError]),
+                    initial_state()
+            end;
+        ClientError ->
+            lager:warning("Checkpointing: no riak client available. ~p\n",
+                          [ClientError]),
+            initial_state()
+    end,
+
+    {ok, #state{accs=Accs, p=Partition, fd=FittingDetails}}.
 
 %% @doc Process looks up the previous result for the `Key', and then
 %%      evaluates the funtion on that with the new `Input'.
@@ -146,6 +168,7 @@ archive(#state{accs=Accs}) ->
 -spec checkpoint(term(), state()) -> ok.
 checkpoint(Archive,
            #state{accs=Accs, p=Partition, fd=FittingDetails} = State) ->
+
     %% Checkpoint data to KV.
     Key = checkpoint_key(State),
     Bucket = checkpoint_bucket(),
@@ -154,10 +177,17 @@ checkpoint(Archive,
 
     case riak:local_client() of
         {ok, Client} ->
-            Client:put(Object);
-        Error ->
-            lager:warning("Checkpointing failed. ~p\n", [Error]),
-            Error
+            case Client:put(Object) of
+                ok ->
+                    lager:warning("Checkpoint storage successful.\n");
+                PutError ->
+                    lager:warning("Checkpoint storage failed. ~p\n",
+                                  [PutError])
+            end;
+        ClientError ->
+            lager:warning("Checkpointing: no riak client available. ~p\n",
+                          [ClientError]),
+            ClientError
     end,
 
     %% Forward results to the next worker.
@@ -225,6 +255,11 @@ chashfun({Key,_}) ->
 serialize_archive(Archive) ->
     term_to_binary(Archive).
 
+%% @doc Deserialize the archive for storage.
+-spec deserialize_archive(binary()) -> dict().
+deserialize_archive(Archive) ->
+    binary_to_term(Archive).
+
 %% @doc Generate a key for the checkpoint.
 %% @todo This may not be unique enough if they are running multiple of
 %%       the riak_kv checkpointing reducers.
@@ -243,3 +278,8 @@ checkpoint_bucket() ->
     app_helper:get_env(riak_kv,
                        vnode_checkpoint_bucket,
                        <<"checkpoints">>).
+
+%% @doc Generate initial state.
+-spec initial_state() -> dict().
+initial_state() ->
+    dict:new().
