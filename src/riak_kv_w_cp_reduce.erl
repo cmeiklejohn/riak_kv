@@ -278,7 +278,7 @@ checkpoint_key(#state{p=Partition, fd=FittingDetails}) ->
 checkpoint_bucket() ->
     app_helper:get_env(riak_kv,
                        vnode_checkpoint_bucket,
-                       <<"checkpoints">>).
+                       <<"__riak_kv_w_cp_reduce_checkpoints__">>).
 
 %% @doc Generate initial state.
 -spec initial_state() -> dict().
