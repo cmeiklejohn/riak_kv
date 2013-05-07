@@ -51,7 +51,10 @@ terminate(Name) ->
 
 %% @doc Ingest a message into a pipeline.
 -spec accept(atom(), term()) ->
-    ok | {error, riak_pipe_vnode:qerror()} | {error, unregistered}.
+    ok |
+    {error, riak_pipe_vnode:qerror()} |
+    {error, unregistered} |
+    {error, retry}.
 accept(Name, Message) ->
     case retrieve(Name) of
         undefined ->
@@ -91,32 +94,13 @@ unlisten(Name, Pid) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([Name, FittingSpecs]) ->
-    case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
+    case initialize_pipeline(Name, FittingSpecs) of
         {ok, Pipe} ->
-
-            Key = fittings_key(Name),
-            Bucket = fittings_bucket(),
-            Value = serialize_fittings(FittingSpecs),
-            Object = riak_object:new(Bucket, Key, Value),
-
-            case riak:local_client() of
-                {ok, Client} ->
-                    case Client:put(Object) of
-                        ok ->
-                            lager:warning("Fitting storage successful.\n");
-                        PutError ->
-                            lager:warning("Fitting storage failed. ~p\n",
-                                          [PutError])
-                    end;
-                ClientError ->
-                    lager:warning("Fitting storage: no riak client available. ~p\n",
-                                  [ClientError]),
-                    ClientError
-            end,
-
-            {ok, #state{name=Name, pipe=Pipe, fitting_specs=FittingSpecs}};
-        _ ->
-            {stop, failed_registration}
+            {ok, #state{name=Name,
+                        pipe=Pipe,
+                        fitting_specs=FittingSpecs}};
+        {error, Error} ->
+            {stop, Error}
     end.
 
 %%--------------------------------------------------------------------
@@ -128,10 +112,25 @@ init([Name, FittingSpecs]) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
-handle_call({accept, Message}, _From, State) ->
-    Pipe = State#state.pipe,
-    Reply = riak_pipe:queue_work(Pipe, Message),
-    {reply, Reply, State};
+handle_call({accept, Message}, _From,
+            #state{name=Name,
+                   pipe=Pipe,
+                   fitting_specs=FittingSpecs} = State) ->
+    try
+        Reply = riak_pipe:queue_work(Pipe, Message),
+        {reply, Reply, State}
+    catch
+        _:_ ->
+            case initialize_pipeline(Name, FittingSpecs) of
+                {ok, Pipe} ->
+                    NewState = #state{name=Name,
+                                      pipe=Pipe,
+                                      fitting_specs=FittingSpecs},
+                    {reply, {error, retry}, NewState};
+                {error, Error} ->
+                    {reply, {error, Error}, State}
+            end
+    end;
 handle_call(terminate, _From, State) ->
     Reply = ok,
     {stop, terminate, Reply, State};
@@ -213,3 +212,40 @@ fittings_bucket() ->
 -spec serialize_fittings(list(#fitting_spec{})) -> binary().
 serialize_fittings(FittingSpecs) ->
     term_to_binary(FittingSpecs).
+
+%% @doc Store fitting speifications.
+-spec store_fittings(atom(), list(#fitting_spec{})) -> ok.
+store_fittings(Name, FittingSpecs) ->
+    Key = fittings_key(Name),
+    Bucket = fittings_bucket(),
+    Value = serialize_fittings(FittingSpecs),
+    Object = riak_object:new(Bucket, Key, Value),
+
+    case riak:local_client() of
+        {ok, Client} ->
+            case Client:put(Object) of
+                ok ->
+                    lager:warning("Fitting storage successful.\n");
+                PutError ->
+                    lager:warning("Fitting storage failed. ~p\n",
+                                  [PutError])
+            end;
+        ClientError ->
+            lager:warning("Fitting storage: no riak client available. ~p\n",
+                          [ClientError]),
+            ClientError
+    end,
+    ok.
+
+%% @doc Initialize pipeline.
+-spec initialize_pipeline(atom(), list(#fitting_spec{})) ->
+    {ok, term()} | {error, term()}.
+initialize_pipeline(Name, FittingSpecs) ->
+    case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
+        {ok, Pipe} ->
+            ok = store_fittings(Name, FittingSpecs),
+            {ok, Pipe};
+        _ ->
+            {error, failed_registration}
+    end.
+
