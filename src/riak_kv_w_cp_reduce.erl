@@ -173,7 +173,7 @@ checkpoint(Archive,
     Key = checkpoint_key(State),
     Bucket = checkpoint_bucket(),
     Value = serialize_archive(Archive),
-    Object = riak_object:new(Key, Bucket, Value),
+    Object = riak_object:new(Bucket, Key, Value),
 
     case riak:local_client() of
         {ok, Client} ->
