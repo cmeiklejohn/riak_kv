@@ -82,12 +82,23 @@ from_stream(ReqData, Context) ->
 process_post(ReqData, Context) ->
     Body = wrq:req_body(ReqData),
     Pipeline = Context#context.pipeline,
+    Id = erlang:phash2(now()),
 
-    case riak_kv_pipeline:accept(Pipeline, Body) of
+    case riak_kv_pipeline:listen(Pipeline, self()) of
         ok ->
-            {true, ReqData, Context};
+            case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
+                ok ->
+                    receive
+                        {Id, Response} ->
+                            NewResponse = mochijson2:encode(Response),
+                            NewReqData = wrq:set_resp_body(NewResponse, ReqData),
+                            {true, NewReqData, Context}
+                    end;
+                {error, _} ->
+                    {false, ReqData, Context}
+            end;
         {error, _} ->
-            {{halt, 400}, ReqData, Context}
+            {false, ReqData, Context}
     end.
 
 %% @doc Stream messages from the pipeline.
