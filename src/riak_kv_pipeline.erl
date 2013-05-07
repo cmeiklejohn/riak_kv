@@ -93,6 +93,27 @@ unlisten(Name, Pid) ->
 init([Name, FittingSpecs]) ->
     case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
         {ok, Pipe} ->
+
+            Key = fittings_key(Name),
+            Bucket = fittings_bucket(),
+            Value = serialize_fittings(FittingSpecs),
+            Object = riak_object:new(Bucket, Key, Value),
+
+            case riak:local_client() of
+                {ok, Client} ->
+                    case Client:put(Object) of
+                        ok ->
+                            lager:warning("Fitting storage successful.\n");
+                        PutError ->
+                            lager:warning("Fitting storage failed. ~p\n",
+                                          [PutError])
+                    end;
+                ClientError ->
+                    lager:warning("Fitting storage: no riak client available. ~p\n",
+                                  [ClientError]),
+                    ClientError
+            end,
+
             {ok, #state{name=Name, pipe=Pipe, fitting_specs=FittingSpecs}};
         _ ->
             {stop, failed_registration}
@@ -175,3 +196,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+%% @doc Key for fitting specifications for a pipeline.
+-spec fittings_key(atom()) -> binary().
+fittings_key(Name) ->
+    list_to_binary("pipeline_" ++ atom_to_list(Name)).
+
+%% @doc Bucket where to store the fitting specifications.
+-spec fittings_bucket() -> binary().
+fittings_bucket() ->
+    app_helper:get_env(riak_kv,
+                       vnode_fitting_bucket,
+                       <<"__riak_kv_pipeline_fittings__">>).
+
+%% @doc How to serialize fittings.
+-spec serialize_fittings(list(#fitting_spec{})) -> binary().
+serialize_fittings(FittingSpecs) ->
+    term_to_binary(FittingSpecs).
