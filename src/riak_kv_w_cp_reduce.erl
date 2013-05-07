@@ -111,7 +111,8 @@ init(Partition, FittingDetails) ->
     Accs = case riak:local_client() of
         {ok, Client} ->
             case Client:get(Bucket, Key) of
-                {ok, Object} ->
+                {ok, RObject} ->
+                    Object = riak_object:get_value(RObject),
                     lager:warning("Checkpoint retrieval successful.\n"),
                     deserialize_archive(Object);
                 GetError ->
