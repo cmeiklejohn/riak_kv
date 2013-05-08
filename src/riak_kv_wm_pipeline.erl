@@ -35,11 +35,13 @@ resource_exists(ReqData, Context) ->
 
     try
         Pipeline = list_to_existing_atom(Name),
+        lager:warning("Attempting pipeline retrieval: ~p\n", [Pipeline]),
 
         case riak_kv_pipeline:retrieve(Pipeline) of
             undefined ->
                 {false, ReqData, Context};
-            _ ->
+            Pid ->
+                lager:warning("Pipeline retrieved: ~p\n", [Pid]),
                 {true, ReqData, #context{pipeline=Pipeline}}
         end
     catch
@@ -73,8 +75,12 @@ from_stream(ReqData, Context) ->
 
     case riak_kv_pipeline:accept(Pipeline, Body) of
         ok ->
+            lager:warning("Successful event ingestion: ~p\n",
+                          [Pipeline]),
             {true, ReqData, Context};
-        {error, _} ->
+        {error, Error} ->
+            lager:warning("Failed event ingestion: ~p ~p\n",
+                          [Pipeline, Error]),
             {{halt, 400}, ReqData, Context}
     end.
 
