@@ -78,10 +78,14 @@ from_stream(ReqData, Context) ->
             lager:warning("Successful event ingestion: ~p\n",
                           [Pipeline]),
             {true, ReqData, Context};
+        {error, unregistered} ->
+            lager:warning("Failed pipeline unregistered: ~p\n",
+                          [Pipeline]),
+            {{halt, 404}, ReqData, Context};
         {error, Error} ->
             lager:warning("Failed event ingestion: ~p ~p\n",
                           [Pipeline, Error]),
-            {{halt, 400}, ReqData, Context}
+            {{halt, 404}, ReqData, Context}
     end.
 
 %% @doc Ingest messages.
