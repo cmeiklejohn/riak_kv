@@ -159,9 +159,11 @@ handle_info(#pipe_result{} = PipeResult, State)->
 
     %% Broadcast to all members of the named process group.
     _ = case pg2:get_members(Name) of
-        {error, _} ->
+        {error, Error} ->
+            lager:warning("Process group unavailable: ~p\n", [Error]),
             ok;
         Pids ->
+            lager:warning("Process group brodcast: ~p\n", [Pids]),
             [Pid ! Result || Pid <- Pids]
     end,
 
