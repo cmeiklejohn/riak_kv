@@ -9,7 +9,6 @@
          to_stream/2,
          from_stream/2,
          process_post/2,
-         finish_request/2,
          delete_resource/2,
          allowed_methods/2,
          resource_exists/2,
@@ -135,11 +134,3 @@ stream(Boundary) ->
                     "\r\n\r\n", Content, "\r\n"],
             {Body, fun() -> stream(Boundary) end}
     end.
-
-%% @doc When we're finished, ensure we are not listening for events.
-finish_request(ReqData, Context) ->
-    Pipeline = Context#context.pipeline,
-
-    %% Unlisten.
-    _ = riak_kv_pipeline:unlisten(Pipeline, self()),
-    {true, ReqData, Context}.
