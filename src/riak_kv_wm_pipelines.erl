@@ -91,14 +91,7 @@ maybe_create_pipeline(ReqData, Context) ->
                     {ok, Specs} = fittings_to_fitting_specs(Fittings),
 
                     %% TODO: better error handling
-                    case register_pipeline(Name, Specs) of
-                        {ok, _Pid} ->
-                            lager:warning("Pipeline started ~p\n",
-                                          [Name]);
-                        {error, Error} ->
-                            lager:warning("Pipeline creation failed ~p ~p\n",
-                                          [Name, Error])
-                    end,
+                    {ok, _Pid} = register_pipeline(Name, Specs),
 
                     {true, Context#context{pipeline=Name}}
                 end;

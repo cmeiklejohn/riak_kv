@@ -93,7 +93,7 @@ process_post(ReqData, Context) ->
     Pipeline = Context#context.pipeline,
     Id = erlang:phash2(now()),
 
-    case riak_kv_pipeline:listen(Pipeline, self()) of
+    case listen(Pipeline) of
         ok ->
             case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
                 ok ->
@@ -106,7 +106,7 @@ process_post(ReqData, Context) ->
                 {error, _} ->
                     {false, ReqData, Context}
             end;
-        {error, _} ->
+        _ ->
             {false, ReqData, Context}
     end.
 
@@ -114,7 +114,7 @@ process_post(ReqData, Context) ->
 to_stream(ReqData, Context) ->
     Pipeline = Context#context.pipeline,
 
-    case riak_kv_pipeline:listen(Pipeline, self()) of
+    case listen(Pipeline) of
         ok ->
             Boundary = riak_core_util:unique_id_62(),
             NewReqData = wrq:set_resp_header("Content-Type",
@@ -134,3 +134,8 @@ stream(Boundary) ->
                     "\r\n\r\n", Content, "\r\n"],
             {Body, fun() -> stream(Boundary) end}
     end.
+
+%% @doc Generate a listener and listen.
+listen(Pipeline) ->
+    Listener = riak_kv_pipeline:generate_listener(Pipeline),
+    Listener().

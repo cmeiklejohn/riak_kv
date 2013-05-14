@@ -10,8 +10,8 @@
 %% API
 -export([start_link/2,
          accept/2,
-         listen/2,
-         unlisten/2,
+         generate_listener/1,
+         generate_unlistener/1,
          terminate/1,
          retrieve/1]).
 
@@ -68,19 +68,29 @@ accept(Name, Message) ->
 retrieve(Name) ->
     global:whereis_name(Name).
 
-%% @doc Register a pid to receive results from the pipeline.
--spec listen(atom(), pid()) -> ok | {error, {no_such_group, atom()}}.
-listen(Name, Pid) ->
-    %% Attempt to create a process group for watching pipeline.
-    ok = pg2:create(Name),
+%% @doc Generate listener.
+-spec generate_listener(atom()) -> fun(() -> 'error' | 'ok').
+generate_listener(Name) ->
+    fun() ->
+        case gproc:reg({p, g, Name}) of
+            true ->
+                ok;
+            _ ->
+                error
+        end
+    end.
 
-    %% Add myself to the process list.
-    pg2:join(Name, Pid).
-
-%% @doc Unregister a listener.
--spec unlisten(atom(), pid()) -> ok | {error, {no_such_group, atom()}}.
-unlisten(Name, Pid) ->
-    pg2:leave(Name, Pid).
+%% @doc Generate unlistener.
+-spec generate_unlistener(atom()) -> fun(() -> 'error' | 'ok').
+generate_unlistener(Name) ->
+    fun() ->
+        case gproc:unreg(Name) of
+            true ->
+                ok;
+            _ ->
+                error
+        end
+    end.
 
 %%====================================================================
 %% gen_server callbacks
@@ -158,14 +168,7 @@ handle_info(#pipe_result{} = PipeResult, State)->
     Result = PipeResult#pipe_result.result,
 
     %% Broadcast to all members of the named process group.
-    _ = case pg2:get_members(Name) of
-        {error, Error} ->
-            lager:warning("Process group unavailable: ~p\n", [Error]),
-            ok;
-        Pids ->
-            lager:warning("Process group brodcast: ~p\n", [Pids]),
-            [Pid ! Result || Pid <- Pids]
-    end,
+    Result = gproc:send(Name, Result),
 
     {noreply, State};
 handle_info(_Info, State) ->
