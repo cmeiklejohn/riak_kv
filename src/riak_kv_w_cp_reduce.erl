@@ -113,7 +113,6 @@ init(Partition, FittingDetails) ->
             case Client:get(Bucket, Key) of
                 {ok, RObject} ->
                     Object = riak_object:get_value(RObject),
-                    lager:warning("Checkpoint retrieval successful.\n"),
                     deserialize_archive(Object);
                 GetError ->
                     lager:warning("Checkpoint retrieval failed. ~p\n",
