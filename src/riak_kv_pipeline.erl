@@ -168,7 +168,7 @@ handle_info(#pipe_result{} = PipeResult, State)->
     Result = PipeResult#pipe_result.result,
 
     %% Broadcast to all members of the named process group.
-    Result = gproc:send(Name, Result),
+    Result = gproc:send({p, g, Name}, Result),
 
     {noreply, State};
 handle_info(_Info, State) ->
