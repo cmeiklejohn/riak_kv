@@ -90,8 +90,20 @@ maybe_create_pipeline(ReqData, Context) ->
                     %% TODO: better error handling
                     {ok, Specs} = fittings_to_fitting_specs(Fittings),
 
-                    %% TODO: better error handling
-                    {ok, _Pid} = register_pipeline(Name, Specs),
+                    case register_pipeline(Name, Specs) of
+                        {ok, _Pid} ->
+                            lager:warning("Pipeline started: ~p.\n",
+                                          [Name]),
+                            ok;
+                        {error, already_started} ->
+                            lager:warning("Pipeline already started: ~p.\n",
+                                          [Name]),
+                            ok;
+                        {error, _Error} ->
+                            lager:warning("Pipeline failed to start: ~p.\n",
+                                          [Name]),
+                            ok
+                    end,
 
                     {true, Context#context{pipeline=Name}}
                 end;
