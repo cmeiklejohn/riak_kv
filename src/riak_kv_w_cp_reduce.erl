@@ -179,7 +179,7 @@ checkpoint(Archive,
         {ok, Client} ->
             case Client:put(Object) of
                 ok ->
-                    lager:warning("Checkpoint storage successful.\n");
+                    ok;
                 PutError ->
                     lager:warning("Checkpoint storage failed. ~p\n",
                                   [PutError])

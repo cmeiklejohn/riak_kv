@@ -34,13 +34,11 @@ resource_exists(ReqData, Context) ->
 
     try
         Pipeline = list_to_existing_atom(Name),
-        lager:warning("Attempting pipeline retrieval: ~p\n", [Pipeline]),
 
         case riak_kv_pipeline:retrieve(Pipeline) of
             undefined ->
                 {false, ReqData, Context};
-            Pid ->
-                lager:warning("Pipeline retrieved: ~p\n", [Pid]),
+            _Pid ->
                 {true, ReqData, #context{pipeline=Pipeline}}
         end
     catch

@@ -74,19 +74,12 @@ generate_listener(Name) ->
     Key = {p, g, Name},
 
     fun() ->
-        lager:warning("Registering listener for ~p ~p\n",
-                      [Name, self()]),
-
         case lists:member(self(), gproc:lookup_pids(Key)) of
             true ->
-                lager:warning("Already registered listener for ~p ~p\n",
-                              [Name, self()]),
                 ok;
             false ->
                 case gproc:reg(Key) of
                     true ->
-                        lager:warning("Listener successful for ~p ~p\n",
-                                      [Name, self()]),
                         ok;
                     _ ->
                         error
