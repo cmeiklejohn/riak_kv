@@ -146,5 +146,4 @@ encode(Content) ->
 
 %% @doc Generate a listener and listen.
 listen(Pipeline) ->
-    Listener = riak_kv_pipeline:generate_listener(Pipeline),
-    Listener().
+    riak_kv_pipeline:listen(Pipeline, self()).

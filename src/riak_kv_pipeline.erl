@@ -10,8 +10,8 @@
 %% API
 -export([start_link/2,
          accept/2,
-         generate_listener/1,
-         generate_unlistener/1,
+         listen/2,
+         unlisten/2,
          terminate/1,
          retrieve/1]).
 
@@ -58,6 +58,9 @@ terminate(Name) ->
 accept(Name, Message) ->
     case retrieve(Name) of
         undefined ->
+            lager:warning("Accept failed: unregistered. ~p ~p.\n",
+                          [Name, Message]),
+
             {error, unregistered};
         _Pid ->
             gen_server:call({global, Name}, {accept, Message}, infinity)
@@ -68,35 +71,24 @@ accept(Name, Message) ->
 retrieve(Name) ->
     global:whereis_name(Name).
 
-%% @doc Generate listener.
--spec generate_listener(atom()) -> fun(() -> 'error' | 'ok').
-generate_listener(Name) ->
-    Key = {p, g, Name},
-
-    fun() ->
-        case lists:member(self(), gproc:lookup_pids(Key)) of
-            true ->
-                ok;
-            false ->
-                case gproc:reg(Key) of
-                    true ->
-                        ok;
-                    _ ->
-                        error
-                end
-        end
+%% @doc Listen for events.
+-spec listen(atom(), pid()) -> {ok | error}.
+listen(Name, Pid) ->
+    case pg2:join(Name, Pid) of
+        ok ->
+            ok;
+        {error, no_such_group} ->
+            error
     end.
 
-%% @doc Generate unlistener.
--spec generate_unlistener(atom()) -> fun(() -> 'error' | 'ok').
-generate_unlistener(Name) ->
-    fun() ->
-        case gproc:unreg(Name) of
-            true ->
-                ok;
-            _ ->
-                error
-        end
+%% @doc Unlisten for events.
+-spec unlisten(atom(), pid()) -> ok.
+unlisten(Name, Pid) ->
+    case pg2:leave(Name, Pid) of
+        ok ->
+            ok;
+        {error, no_such_group} ->
+            ok
     end.
 
 %%====================================================================
@@ -137,7 +129,9 @@ handle_call({accept, Message}, _From,
         Reply = riak_pipe:queue_work(Pipe, Message),
         {reply, Reply, State}
     catch
-        _:_ ->
+        _:Reason ->
+            lager:warning("Failed accept: ~p ~p\n", [Name, Reason]),
+
             case initialize_pipeline(Name, FittingSpecs) of
                 {ok, Pipe} ->
                     NewState = #state{name=Name,
@@ -175,7 +169,7 @@ handle_info(#pipe_result{} = PipeResult, State)->
     Result = PipeResult#pipe_result.result,
 
     %% Broadcast to all members of the named process group.
-    Result = gproc:send({p, g, Name}, Result),
+    _ = [Pid ! Result || Pid <- pg2:get_members(Name)],
 
     {noreply, State};
 handle_info(_Info, State) ->
@@ -256,6 +250,7 @@ initialize_pipeline(Name, FittingSpecs) ->
     case riak_pipe:exec(FittingSpecs, [{log, lager}]) of
         {ok, Pipe} ->
             ok = store_fittings(Name, FittingSpecs),
+            ok = pg2:create(Name),
             {ok, Pipe};
         _ ->
             {error, failed_registration}
