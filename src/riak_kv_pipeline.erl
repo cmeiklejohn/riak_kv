@@ -72,8 +72,12 @@ retrieve(Name) ->
 -spec generate_listener(atom()) -> fun(() -> 'error' | 'ok').
 generate_listener(Name) ->
     fun() ->
+        lager:warning("Registering listener for ~p ~p\n",
+                      [Name, self()]),
         case gproc:reg({p, g, Name}) of
             true ->
+                lager:warning("Listener successful for ~p ~p\n",
+                              [Name, self()]),
                 ok;
             _ ->
                 error
