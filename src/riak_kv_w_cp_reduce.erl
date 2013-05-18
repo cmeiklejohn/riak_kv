@@ -162,7 +162,6 @@ archive(#state{accs=Accs}) ->
     %% just send state of reduce so far
     {ok, Accs}.
 
-
 %% @doc Checkpoint archived state to riak_kv.  In addition, forward the
 %%      accumulated state to the sink.
 %% @todo Possibly memoize the client connection.
