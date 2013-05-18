@@ -103,11 +103,18 @@ process_post(ReqData, Context) ->
                             NewReqData = wrq:set_resp_body(NewResponse, ReqData),
                             {true, NewReqData, Context}
                     end;
-                {error, _} ->
-                    {false, ReqData, Context}
+                {error, unregistered} ->
+                    lager:warning("Failed pipeline unregistered: ~p\n",
+                                  [Pipeline]),
+                    {{halt, 404}, ReqData, Context};
+                {error, Error} ->
+                    lager:warning("Failed event ingestion: ~p ~p\n",
+                                  [Pipeline, Error]),
+                    {{halt, 503}, ReqData, Context}
             end;
         _ ->
-            {false, ReqData, Context}
+            lager:warning("Failed listener: ~p ~p.\n", [Pipeline, self()]),
+            {{halt, 500}, ReqData, Context}
     end.
 
 %% @doc Stream messages from the pipeline.
