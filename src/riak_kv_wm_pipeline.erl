@@ -91,17 +91,17 @@ from_stream(ReqData, Context) ->
 
 %% @doc Ingest messages.
 process_post(ReqData, Context) ->
+    Id = erlang:phash2(now()),
     Body = wrq:req_body(ReqData),
     Pipeline = Context#context.pipeline,
-    Id = erlang:phash2(now()),
 
     case listen(Pipeline) of
         ok ->
             case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
                 ok ->
                     receive
-                        {Id, Response} ->
-                            NewResponse = mochijson2:encode(Response),
+                        {Id, _} = Response ->
+                            NewResponse = encode(Response),
                             NewReqData = wrq:set_resp_body(NewResponse, ReqData),
                             {true, NewReqData, Context}
                     end;
@@ -133,9 +133,13 @@ stream(Boundary) ->
         Content ->
             Body = ["\r\n--", Boundary,
                     "\r\nContent-Type: application/octet-stream",
-                    "\r\n\r\n", Content, "\r\n"],
+                    "\r\n\r\n", encode(Content), "\r\n"],
             {Body, fun() -> stream(Boundary) end}
     end.
+
+%% @doc Encode content.
+encode(Content) ->
+    term_to_binary(Content).
 
 %% @doc Generate a listener and listen.
 listen(Pipeline) ->
