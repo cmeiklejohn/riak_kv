@@ -74,8 +74,6 @@ from_stream(ReqData, Context) ->
 
     case riak_kv_pipeline:accept(Pipeline, Body) of
         ok ->
-            lager:warning("Successful event ingestion: ~p\n",
-                          [Pipeline]),
             {true, ReqData, Context};
         {error, unregistered} ->
             lager:warning("Failed pipeline unregistered: ~p\n",
