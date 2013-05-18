@@ -90,6 +90,12 @@ init([]) ->
     PipelineSup = {riak_kv_pipeline_sup,
                  {riak_kv_pipeline_sup, start_link, []},
                  permanent, infinity, supervisor, [riak_kv_pipeline_sup]},
+    GProcSup = {gproc_sup,
+                {gproc_sup, start_link, [[]]},
+                 permanent, infinity, supervisor, [gproc_sup]},
+
+    % Force global gproc distribution.
+    application:set_env(riak_kv, gproc_dist, 'all'),
 
     % Figure out which processes we should run...
     HasStorageBackend = (app_helper:get_env(riak_kv, storage_backend) /= undefined),
@@ -109,6 +115,7 @@ init([]) ->
         MapJSPool,
         ReduceJSPool,
         HookJSPool,
+        GProcSup,
         PipelineSup
     ]),
 
