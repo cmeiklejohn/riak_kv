@@ -71,16 +71,26 @@ retrieve(Name) ->
 %% @doc Generate listener.
 -spec generate_listener(atom()) -> fun(() -> 'error' | 'ok').
 generate_listener(Name) ->
+    Key = {p, g, Name},
+
     fun() ->
         lager:warning("Registering listener for ~p ~p\n",
                       [Name, self()]),
-        case gproc:reg({p, g, Name}) of
+
+        case lists:member(self(), gproc:lookup_pids(Key)) of
             true ->
-                lager:warning("Listener successful for ~p ~p\n",
+                lager:warning("Already registered listener for ~p ~p\n",
                               [Name, self()]),
                 ok;
-            _ ->
-                error
+            false ->
+                case gproc:reg(Key) of
+                    true ->
+                        lager:warning("Listener successful for ~p ~p\n",
+                                      [Name, self()]),
+                        ok;
+                    _ ->
+                        error
+                end
         end
     end.
 
