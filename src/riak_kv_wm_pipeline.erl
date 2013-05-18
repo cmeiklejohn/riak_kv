@@ -51,12 +51,14 @@ resource_exists(ReqData, Context) ->
 %% @doc Delete a pipeline.
 delete_resource(ReqData, Context) ->
     Pipeline = Context#context.pipeline,
+
     Response = case riak_kv_pipeline:terminate(Pipeline) of
         ok ->
             true;
         {error, _Error} ->
             false
     end,
+
     {Response, ReqData, Context}.
 
 %% @doc Provide data in byte streams only.
