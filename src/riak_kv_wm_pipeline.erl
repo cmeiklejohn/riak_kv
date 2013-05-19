@@ -123,9 +123,11 @@ to_stream(ReqData, Context) ->
         ok ->
             Boundary = riak_core_util:unique_id_62(),
             NewReqData = wrq:set_resp_header("Content-Type",
-                                             "multipart/mixed; boundary=" ++ Boundary,
+                                             "multipart/mixed;
+                                             boundary=" ++ Boundary,
                                              ReqData),
-            {{stream, {<<>>, fun() -> stream(Pipeline, Boundary) end}}, NewReqData, Context};
+            {{stream, {<<>>, fun() -> stream(Pipeline, Boundary) end}},
+             NewReqData, Context};
         _ ->
             {{halt, 500}, ReqData, Context}
     end.
