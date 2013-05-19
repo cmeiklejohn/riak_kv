@@ -11,7 +11,8 @@
 %% @doc Mapper which just returns the same key/value pair.
 -spec mapper(term(), term(), term()) -> {ok, {term(), term()}}.
 mapper({Key, Value}, Partition, FD) ->
-    ok = riak_pipe_vnode_worker:send_output({Key, byte_size(Value)},
+    Result = byte_size(Value),
+    ok = riak_pipe_vnode_worker:send_output({Key, Result},
                                             Partition, FD),
     ok;
 mapper(_Input, Partition, FD) ->
