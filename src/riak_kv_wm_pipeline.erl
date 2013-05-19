@@ -99,16 +99,7 @@ process_post(ReqData, Context) ->
                         {Id, _} = Response ->
                             NewResponse = encode(Response),
                             NewReqData = wrq:set_resp_body(NewResponse, ReqData),
-
-                            %% Unlisten immediately.
                             ok = unlisten(Pipeline),
-
-                            %% Flush the message queue to prevent
-                            %% mochiweb_http:124 from receiveing a message
-                            %% during a keep-alive request and causing a 400 Bad
-                            %% Request.
-                            ok = flush(),
-
                             {true, NewReqData, Context}
                     end;
                 {error, unregistered} ->
@@ -123,6 +114,7 @@ process_post(ReqData, Context) ->
         _ ->
             lager:warning("Failed listener: ~p ~p.\n",
                           [Pipeline, self()]),
+            ok = unlisten(Pipeline),
             {{halt, 500}, ReqData, Context}
     end.
 
@@ -163,9 +155,12 @@ listen(Pipeline) ->
 %% @doc Unlisten for this process.
 -spec unlisten(atom()) -> ok.
 unlisten(Pipeline) ->
-    riak_kv_pipeline:unlisten(Pipeline, self()).
+    riak_kv_pipeline:unlisten(Pipeline, self()),
+    flush().
 
 %% @doc Flush the message queue immediately.
+%%      Prevents mochiweb_http:124 from receiveing a message during a
+%%      keep-alive request and causing a 400 Bad Request.
 -spec flush() -> ok.
 flush() ->
     receive
@@ -173,6 +168,5 @@ flush() ->
             flush()
     after
         0 ->
-            true
-    end,
-    ok.
+            ok
+    end.
