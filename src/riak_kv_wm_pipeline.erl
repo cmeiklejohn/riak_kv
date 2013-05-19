@@ -96,7 +96,6 @@ process_post(ReqData, Context) ->
             case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
                 ok ->
                     Response = wait(Pipeline, Id),
-                    ok = unlisten(Pipeline),
                     NewResponse = encode(Response),
                     NewReqData = wrq:set_resp_body(NewResponse, ReqData),
                     {true, NewReqData, Context};
@@ -174,6 +173,7 @@ flush() ->
 wait(Name, Id) ->
     receive
         {riak_kv_pipeline_result, {_Pid, Name, {Id, Body}}} ->
+            unlisten(Name),
             {Id, Body};
         {riak_kv_pipeline_result, _} ->
             wait(Name, Id)
