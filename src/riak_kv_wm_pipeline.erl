@@ -95,10 +95,10 @@ process_post(ReqData, Context) ->
         ok ->
             case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
                 ok ->
-                    Response = wait(Id),
+                    Response = wait(Pipeline, Id),
+                    ok = unlisten(Pipeline),
                     NewResponse = encode(Response),
                     NewReqData = wrq:set_resp_body(NewResponse, ReqData),
-                    ok = unlisten(Pipeline),
                     {true, NewReqData, Context};
                 {error, unregistered} ->
                     lager:warning("Failed pipeline unregistered: ~p\n",
@@ -125,20 +125,21 @@ to_stream(ReqData, Context) ->
             NewReqData = wrq:set_resp_header("Content-Type",
                                              "multipart/mixed; boundary=" ++ Boundary,
                                              ReqData),
-            {{stream, {<<>>, fun() -> stream(Boundary) end}}, NewReqData, Context};
+            {{stream, {<<>>, fun() -> stream(Pipeline, Boundary) end}}, NewReqData, Context};
         _ ->
             {{halt, 500}, ReqData, Context}
     end.
 
 %% @doc Stream data from the pipeline out.
-stream(Boundary) ->
-    Content = wait(),
+stream(Pipeline, Boundary) ->
+    Content = wait(Pipeline),
     Body = ["\r\n--", Boundary,
             "\r\nContent-Type: application/octet-stream",
             "\r\n\r\n", encode(Content), "\r\n"],
-    {Body, fun() -> stream(Boundary) end}.
+    {Body, fun() -> stream(Pipeline, Boundary) end}.
 
 %% @doc Encode content.
+-spec encode(term()) -> binary().
 encode(Content) ->
     term_to_binary(Content).
 
@@ -167,22 +168,22 @@ flush() ->
     end.
 
 %% @doc Wait for a response from the pipeline of a tagged tuple.
--spec wait(term()) -> term().
-wait(Id) ->
+-spec wait(atom(), term()) -> term().
+wait(Name, Id) ->
     receive
-        {riak_kv_pipeline_result, {Id, Body}} ->
+        {riak_kv_pipeline_result, {_Pid, Name, {Id, Body}}} ->
             {Id, Body};
         {riak_kv_pipeline_result, _} ->
-            wait(Id)
+            wait(Name, Id)
     end.
 
 %% @doc Wait for any response from the pipeline.  When a tagged tuple is
 %%      encountered, return just the body.
--spec wait() -> term().
-wait() ->
+-spec wait(atom()) -> term().
+wait(Name) ->
     receive
-        {riak_kv_pipeline_result, {_Id, Body}} ->
+        {riak_kv_pipeline_result, {_Pid, Name, {_Id, Body}}} ->
             Body;
-        {riak_kv_pipeline_result, Content} ->
+        {riak_kv_pipeline_result, {_Pid, Name, Content}} ->
             Content
     end.

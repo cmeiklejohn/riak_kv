@@ -175,7 +175,7 @@ handle_info(#pipe_result{} = PipeResult, State)->
     Result = PipeResult#pipe_result.result,
 
     %% Broadcast to all members of the named process group.
-    _ = [Pid ! {riak_kv_pipeline_result, Result} ||
+    _ = [Pid ! {riak_kv_pipeline_result, {Pid, Name, Result}} ||
             Pid <- pg2:get_members(Name)],
 
     {noreply, State};
