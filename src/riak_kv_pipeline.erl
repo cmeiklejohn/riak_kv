@@ -72,12 +72,18 @@ retrieve(Name) ->
     global:whereis_name(Name).
 
 %% @doc Listen for events.
--spec listen(atom(), pid()) -> {ok | error}.
+-spec listen(atom(), pid()) -> ok | error.
 listen(Name, Pid) ->
-    case pg2:join(Name, Pid) of
-        ok ->
-            ok;
-        {error, no_such_group} ->
+    try
+        case pg2:join(Name, Pid) of
+            ok ->
+                ok;
+            {error, no_such_group} ->
+                error
+        end
+    catch
+        _:Reason ->
+            lager:warning("Listener failed: ~p", [Reason]),
             error
     end.
 

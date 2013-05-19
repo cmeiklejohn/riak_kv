@@ -93,29 +93,32 @@ process_post(ReqData, Context) ->
 
     case listen(Pipeline) of
         ok ->
-            try
-                case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
-                    ok ->
-                        receive
-                            {Id, _} = Response ->
-                                NewResponse = encode(Response),
-                                NewReqData = wrq:set_resp_body(NewResponse, ReqData),
-                                {true, NewReqData, Context}
-                        end;
-                    {error, unregistered} ->
-                        lager:warning("Failed pipeline unregistered: ~p\n",
-                                      [Pipeline]),
-                        {{halt, 404}, ReqData, Context};
-                    {error, Error} ->
-                        lager:warning("Failed event ingestion: ~p ~p\n",
-                                      [Pipeline, Error]),
-                        {{halt, 503}, ReqData, Context}
-                end
-            catch
-                _:Reason ->
-                    lager:warning("Failed accept: ~p ~p",
-                                  [Pipeline, Reason]),
-                    {{halt, 500}, ReqData, Context}
+            case riak_kv_pipeline:accept(Pipeline, {Id, Body}) of
+                ok ->
+                    receive
+                        {Id, _} = Response ->
+                            NewResponse = encode(Response),
+                            NewReqData = wrq:set_resp_body(NewResponse, ReqData),
+
+                            %% Unlisten immediately.
+                            ok = unlisten(Pipeline),
+
+                            %% Flush the message queue to prevent
+                            %% mochiweb_http:124 from receiveing a message
+                            %% during a keep-alive request and causing a 400 Bad
+                            %% Request.
+                            ok = flush(),
+
+                            {true, NewReqData, Context}
+                    end;
+                {error, unregistered} ->
+                    lager:warning("Failed pipeline unregistered: ~p\n",
+                                  [Pipeline]),
+                    {{halt, 404}, ReqData, Context};
+                {error, Error} ->
+                    lager:warning("Failed event ingestion: ~p ~p\n",
+                                  [Pipeline, Error]),
+                    {{halt, 503}, ReqData, Context}
             end;
         _ ->
             lager:warning("Failed listener: ~p ~p.\n",
@@ -153,5 +156,23 @@ encode(Content) ->
     term_to_binary(Content).
 
 %% @doc Generate a listener and listen.
+-spec listen(atom()) -> ok | error.
 listen(Pipeline) ->
     riak_kv_pipeline:listen(Pipeline, self()).
+
+%% @doc Unlisten for this process.
+-spec unlisten(atom()) -> ok.
+unlisten(Pipeline) ->
+    riak_kv_pipeline:unlisten(Pipeline, self()).
+
+%% @doc Flush the message queue immediately.
+-spec flush() -> ok.
+flush() ->
+    receive
+        _ ->
+            flush()
+    after
+        0 ->
+            true
+    end,
+    ok.
