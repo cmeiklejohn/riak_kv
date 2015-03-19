@@ -90,13 +90,22 @@
 -export([put_merge/6]). %% For fsm_eqc_vnode
 -endif.
 
-%% N.B. The ?INDEX macro should be called any time the object bytes on
+%% N.B. The ?YZ_INDEX macro should be called any time the object bytes on
 %% disk are modified.
 -ifdef(TEST).
 %% Use values so that test compile doesn't give 'unused vars' warning.
--define(INDEX(A,B,C), _=element(1,{A,B,C}), ok).
+-define(YZ_INDEX(A,B,C), _=element(1,{A,B,C}), ok).
 -else.
--define(INDEX(Obj, Reason, Partition), yz_kv:index(Obj, Reason, Partition)).
+-define(YZ_INDEX(Obj, Reason, Partition), yz_kv:index(Obj, Reason, Partition)).
+-endif.
+
+%% N.B. The ?LASP_INDEX macro should be called any time the object bytes on
+%% disk are modified.
+-ifdef(TEST).
+%% Use values so that test compile doesn't give 'unused vars' warning.
+-define(LASP_INDEX(A,B,C), _=element(1,{A,B,C}), ok).
+-else.
+-define(LASP_INDEX(Obj, Reason, Partition), lasp:process(Obj, Reason, Partition, node())).
 -endif.
 
 -ifdef(TEST).
@@ -1255,7 +1264,8 @@ do_backend_delete(BKey, RObj, State = #state{idx = Idx,
     {Bucket, Key} = BKey,
     case Mod:delete(Bucket, Key, IndexSpecs, ModState) of
         {ok, UpdModState} ->
-            ?INDEX(RObj, delete, Idx),
+            ?YZ_INDEX(RObj, delete, Idx),
+            ?LASP_INDEX(RObj, delete, Idx),
             delete_from_hashtree(Bucket, Key, State),
             maybe_cache_evict(BKey, State),
             update_index_delete_stats(IndexSpecs),
@@ -1453,7 +1463,8 @@ actual_put(BKey={Bucket, Key}, Obj, IndexSpecs, RB, ReqID,
         {{ok, UpdModState}, EncodedVal} ->
             update_hashtree(Bucket, Key, EncodedVal, State),
             maybe_cache_object(BKey, Obj, State),
-            ?INDEX(Obj, put, Idx),
+            ?YZ_INDEX(Obj, put, Idx),
+            ?LASP_INDEX(Obj, put, Idx),
             case RB of
                 true ->
                     Reply = {dw, Idx, Obj, ReqID};
@@ -1858,7 +1869,8 @@ do_diffobj_put({Bucket, Key}=BKey, DiffObj,
                     update_hashtree(Bucket, Key, DiffObj, StateData),
                     update_index_write_stats(IndexBackend, IndexSpecs),
                     update_vnode_stats(vnode_put, Idx, StartTS),
-                    ?INDEX(DiffObj, handoff, Idx),
+                    ?YZ_INDEX(DiffObj, handoff, Idx),
+                    ?LASP_INDEX(DiffObj, handoff, Idx),
                     InnerRes;
                 {InnerRes, _Val} ->
                     InnerRes
@@ -1884,7 +1896,8 @@ do_diffobj_put({Bucket, Key}=BKey, DiffObj,
                             update_hashtree(Bucket, Key, AMObj, StateData),
                             update_index_write_stats(IndexBackend, IndexSpecs),
                             update_vnode_stats(vnode_put, Idx, StartTS),
-                            ?INDEX(AMObj, handoff, Idx),
+                            ?YZ_INDEX(AMObj, handoff, Idx),
+                            ?LASP_INDEX(AMObj, handoff, Idx),
                             InnerRes;
                         {InnerRes, _EncodedVal} ->
                             InnerRes
