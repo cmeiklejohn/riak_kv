@@ -257,7 +257,7 @@ produce_bucket_body(RD, #ctx{client=Client,
                     {mochijson2:encode({struct, [{error, Reason}]}), RD, Ctx}
             end;
         ?Q_LASP ->
-            case lasp:execute(lasp_riak_keylist_program, global) of
+            case lasp:execute(lasp_riak_index_program, global) of
                 {ok, KeyList} ->
                     JsonKeys = mochijson2:encode({struct, BucketPropsJson ++
                                                       [{?Q_KEYS, KeyList}]}),
