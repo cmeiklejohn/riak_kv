@@ -438,22 +438,41 @@ handle_all_in_memory_index_query(RD, Ctx) ->
 
     Opts0 = [{max_results, MaxResults}] ++ [{pagination_sort, PgSort} || PgSort /= undefined],
     Opts = riak_index:add_timeout_opt(Timeout, Opts0), 
+    Lasp = wrq:get_qs_value(?Q_LASP, false, RD),
 
-    %% Do the index lookup...
-    case Client:get_index(Bucket, Query, Opts) of
-        {ok, Results} ->
-            Continuation = make_continuation(MaxResults, Results, length(Results)),
-            JsonResults = encode_results(ReturnTerms, Results, Continuation),
-            {JsonResults, RD, Ctx};
-        {error, timeout} ->
-            {{halt, 503},
-             wrq:set_resp_header("Content-Type", "text/plain",
-                                 wrq:append_to_response_body(
-                                   io_lib:format("request timed out~n",[]),
-                                   RD)),
-             Ctx};
-        {error, Reason} ->
-            {{error, Reason}, RD, Ctx}
+    case Lasp of
+        "true" ->
+            #riak_kv_index_v3{filter_field=IndexName,
+                              start_term=IndexValue} = Query,
+            IndexView = lasp_riak_index_program,
+            Module = list_to_atom(atom_to_list(IndexView) ++ "-" ++
+                                  binary_to_list(IndexName) ++ "-" ++
+                                  binary_to_list(IndexValue)),
+            case lasp:execute(Module, global) of
+                {ok, Results} ->
+                    JsonKeys = mochijson2:encode({struct, [{?Q_KEYS, Results}]}),
+                    {JsonKeys, RD, Ctx};
+                {error, Reason} ->
+                    {mochijson2:encode({struct, [{error, Reason}]}), RD, Ctx}
+            end;
+        _ ->
+            %% Do the index lookup...
+            case Client:get_index(Bucket, Query, Opts) of
+                {ok, Results} ->
+                    lager:info("Results: ~p", [Results]),
+                    Continuation = make_continuation(MaxResults, Results, length(Results)),
+                    JsonResults = encode_results(ReturnTerms, Results, Continuation),
+                    {JsonResults, RD, Ctx};
+                {error, timeout} ->
+                    {{halt, 503},
+                     wrq:set_resp_header("Content-Type", "text/plain",
+                                         wrq:append_to_response_body(
+                                           io_lib:format("request timed out~n",[]),
+                                           RD)),
+                     Ctx};
+                {error, Reason} ->
+                    {{error, Reason}, RD, Ctx}
+            end
     end.
 
 encode_results(ReturnTerms, Results) ->
